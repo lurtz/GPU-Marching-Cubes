@@ -1,24 +1,30 @@
 #include "gpu-mc.h"
+#include "gpu-mc-kernel.h"
 #include <utility>
 #include <vector>
 
+const unsigned int CUBESIZE = 8;
+const unsigned int LOG2CUBESIZE = 3;
 unsigned int SIZE;
 unsigned int rawMemSize;
-int * rawDataPtr;
+unsigned char * rawDataPtr;
 
-// first two level contain volumes with unsigned char as elements
+// first level has char4 as datatype, which contains: (number of triangles, cube index, value of first cube element, 0)
+// first to second level contain volumes with unsigned char as elements
 // third to fifth (including) level contain unsigned short as elements
 // sixth level and more uses int
 std::vector<std::pair<unsigned int, void*> > images_size_pointer;
+
+int isolevel = 50;
 
 void setupCuda(unsigned char * voxels, unsigned int size) {
     SIZE = size;
 
     // Create images for the HistogramPyramid
     unsigned int bufferSize = SIZE;
-    int * tmpDataPtr = NULL;
+    void * tmpDataPtr = NULL;
     // Make the two first buffers use INT8
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned char));
+    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(uchar4));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     bufferSize /= 2;
     cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned char));
@@ -49,3 +55,50 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice);
     delete[] voxels;
 }
+
+int log2(unsigned int val) {
+    int log2Val = 0;
+    while (val > 1) {
+      val /= 2; log2Val++;
+    }
+    return log2Val;
+}
+
+void updateScalarField() {
+    unsigned int _size = images_size_pointer[0].first;
+    dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
+    dim3 grid((_size / CUBESIZE) * (_size / CUBESIZE), _size / CUBESIZE, 1);
+    int log2GridSize = log2(_size / CUBESIZE);
+    kernelClassifyCubes<<<grid , block>>>((uchar4 *)(images_size_pointer[0].second), rawDataPtr, isolevel, log2GridSize, _size/CUBESIZE-1, LOG2CUBESIZE, SIZE);
+}
+/*
+void histoPyramidConstruction() {
+
+        updateScalarField();
+
+        // Run base to first level
+		constructHPLevelKernel.setArg(0, images[0]);
+		constructHPLevelKernel.setArg(1, images[1]);
+
+        queue.enqueueNDRangeKernel(
+			constructHPLevelKernel, 
+			NullRange, 
+			NDRange(SIZE/2, SIZE/2, SIZE/2), 
+			NullRange
+		);
+
+        int previous = SIZE / 2;
+        // Run level 2 to top level
+        for(int i = 1; i < log2((float)SIZE)-1; i++) {
+			constructHPLevelKernel.setArg(0, images[i]);
+			constructHPLevelKernel.setArg(1, images[i+1]);
+			previous /= 2;
+            queue.enqueueNDRangeKernel(
+				constructHPLevelKernel, 
+				NullRange, 
+				NDRange(previous, previous, previous), 
+                NullRange
+			);
+        }
+}
+*/
