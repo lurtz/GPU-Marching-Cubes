@@ -5,6 +5,8 @@
 
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
+const unsigned int CUBESIZEHP = 2;
+const unsigned int LOG2CUBESIZEHP = 1;
 unsigned int SIZE;
 unsigned int rawMemSize;
 unsigned char * rawDataPtr;
@@ -69,36 +71,61 @@ void updateScalarField() {
     dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
     dim3 grid((_size / CUBESIZE) * (_size / CUBESIZE), _size / CUBESIZE, 1);
     int log2GridSize = log2(_size / CUBESIZE);
-    kernelClassifyCubes<<<grid , block>>>((uchar4 *)(images_size_pointer[0].second), rawDataPtr, isolevel, log2GridSize, _size/CUBESIZE-1, LOG2CUBESIZE, SIZE);
+    kernelClassifyCubes<<<grid , block>>>((uchar4 *)(images_size_pointer[0].second), rawDataPtr, isolevel, log2GridSize, _size/CUBESIZE-1, LOG2CUBESIZE, _size);
 }
-/*
+
 void histoPyramidConstruction() {
+    updateScalarField();
 
-        updateScalarField();
-
-        // Run base to first level
-		constructHPLevelKernel.setArg(0, images[0]);
-		constructHPLevelKernel.setArg(1, images[1]);
-
-        queue.enqueueNDRangeKernel(
-			constructHPLevelKernel, 
-			NullRange, 
-			NDRange(SIZE/2, SIZE/2, SIZE/2), 
-			NullRange
-		);
-
-        int previous = SIZE / 2;
-        // Run level 2 to top level
-        for(int i = 1; i < log2((float)SIZE)-1; i++) {
-			constructHPLevelKernel.setArg(0, images[i]);
-			constructHPLevelKernel.setArg(1, images[i+1]);
-			previous /= 2;
-            queue.enqueueNDRangeKernel(
-				constructHPLevelKernel, 
-				NullRange, 
-				NDRange(previous, previous, previous), 
-                NullRange
-			);
-        }
+    unsigned int i = 0;
+    dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
+    
+    if (i < log2((float)SIZE)-1) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel2<<<grid, block>>>((uchar4 *)(images_size_pointer[i].second) , (unsigned char *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+        i++;
+    }
+    
+    if (i < log2((float)SIZE)-1) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel3<<<grid, block>>>((unsigned char *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+        i++;
+    }
+    
+    if (i < log2((float)SIZE)-1) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel45<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+        i++;
+    }
+    
+    if (i < log2((float)SIZE)-1) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel45<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+        i++;
+    }
+    
+    if (i < log2((float)SIZE)-1) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel6<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned int *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+        i++;
+    }
+    
+    // Run level 7 to top level
+    for(; i < log2((float)SIZE)-1; i++) {
+        unsigned int _size = images_size_pointer[i+1].first;
+        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
+        int log2GridSize = log2(_size / CUBESIZEHP);
+        kernelConstructHPLevel<<<grid, block>>>((unsigned int *)(images_size_pointer[i].second) , (unsigned int *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+    }
 }
-*/
+
