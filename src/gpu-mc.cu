@@ -15,7 +15,8 @@ unsigned char * rawDataPtr;
 // first to second level contain volumes with unsigned char as elements
 // third to fifth (including) level contain unsigned short as elements
 // sixth level and more uses int
-std::vector<std::pair<unsigned int, void*> > images_size_pointer;
+std::vector<std::pair<cudaExtent, cudaPitchedPtr> > images_size_pointer;
+std::vector<unsigned char> elementSizes;
 
 int isolevel = 50;
 
@@ -23,32 +24,47 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     SIZE = size;
 
     // Create images for the HistogramPyramid
-    unsigned int bufferSize = SIZE;
-    void * tmpDataPtr = NULL;
+    cudaExtent bufferSize;
+    cudaPitchedPtr tmpDataPtr;
     // Make the two first buffers use INT8
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(uchar4));
+    bufferSize.width = SIZE * sizeof(uchar4);
+    bufferSize.height = SIZE;
+    bufferSize.depth = SIZE;
+    cudaMalloc3D(&tmpDataPtr, bufferSize);
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    bufferSize /= 2;
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned char));
+    elementSizes.push_back(sizeof(uchar4));
+
+    bufferSize.width = bufferSize.depth/2 * sizeof(unsigned char);
+    bufferSize.height = bufferSize.depth/2;
+    bufferSize.depth = bufferSize.depth/2;
+    cudaMalloc3D(&tmpDataPtr, bufferSize);
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    bufferSize /= 2;
+    elementSizes.push_back(sizeof(unsigned char));
+
     // And the third, fourth and fifth INT16
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned short));
-    images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    bufferSize /= 2;
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned short));
-    images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    bufferSize /= 2;
-    cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned short));
-    images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    bufferSize /= 2;
+    for (unsigned int i = 0; i < 3; i++) {
+        bufferSize.width = bufferSize.depth/2 * sizeof(unsigned short);
+        bufferSize.height = bufferSize.depth/2;
+        bufferSize.depth = bufferSize.depth/2;
+        cudaMalloc3D(&tmpDataPtr, bufferSize);
+        images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
+        elementSizes.push_back(sizeof(unsigned short));
+    }
+
     // The rest will use INT32
     for(int i = 5; i < (log2((float)SIZE)); i++) {
-        if(bufferSize == 1)
-            bufferSize = 2; // Image cant be 1x1x1
-        cudaMalloc((void **) &tmpDataPtr, bufferSize * bufferSize * bufferSize * sizeof(unsigned int));
+        bufferSize.width = bufferSize.depth/2 * sizeof(unsigned int);
+        bufferSize.height = bufferSize.depth/2;
+        bufferSize.depth = bufferSize.depth/2;
+        // Image cant be 1x1x1
+        if (bufferSize.depth == 1) {
+            bufferSize.width = 2 * sizeof(unsigned int);
+            bufferSize.height = 2;
+            bufferSize.depth = 2;
+        }
+        cudaMalloc3D(&tmpDataPtr, bufferSize);
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-        bufferSize /= 2;
+        elementSizes.push_back(sizeof(unsigned int));
     }
 
     // Transfer dataset to device
@@ -67,65 +83,22 @@ int log2(unsigned int val) {
 }
 
 void updateScalarField() {
-    unsigned int _size = images_size_pointer[0].first;
+    cudaExtent _size = images_size_pointer[0].first;
     dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
-    dim3 grid((_size / CUBESIZE) * (_size / CUBESIZE), _size / CUBESIZE, 1);
-    int log2GridSize = log2(_size / CUBESIZE);
-    kernelClassifyCubes<<<grid , block>>>((uchar4 *)(images_size_pointer[0].second), rawDataPtr, isolevel, log2GridSize, _size/CUBESIZE-1, LOG2CUBESIZE, _size);
+    dim3 grid((_size.depth / CUBESIZE) * (_size.depth / CUBESIZE), _size.depth / CUBESIZE, 1);
+    int log2GridSize = log2((unsigned int)_size.depth / CUBESIZE);
+    kernelClassifyCubes<<<grid , block>>>(images_size_pointer[0].second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
 }
 
 void histoPyramidConstruction() {
     updateScalarField();
 
-    unsigned int i = 0;
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
-    if (i < log2((float)SIZE)-1) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel2<<<grid, block>>>((uchar4 *)(images_size_pointer[i].second) , (unsigned char *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
-        i++;
-    }
-    
-    if (i < log2((float)SIZE)-1) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel3<<<grid, block>>>((unsigned char *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
-        i++;
-    }
-    
-    if (i < log2((float)SIZE)-1) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel45<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
-        i++;
-    }
-    
-    if (i < log2((float)SIZE)-1) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel45<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned short *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
-        i++;
-    }
-    
-    if (i < log2((float)SIZE)-1) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel6<<<grid, block>>>((unsigned short *)(images_size_pointer[i].second) , (unsigned int *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
-        i++;
-    }
-    
-    // Run level 7 to top level
-    for(; i < log2((float)SIZE)-1; i++) {
-        unsigned int _size = images_size_pointer[i+1].first;
-        dim3 grid((_size / CUBESIZEHP) * (_size / CUBESIZEHP), _size / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size / CUBESIZEHP);
-        kernelConstructHPLevel<<<grid, block>>>((unsigned int *)(images_size_pointer[i].second) , (unsigned int *)(images_size_pointer[i+1].second), log2GridSize, _size/CUBESIZEHP-1, LOG2CUBESIZEHP, _size); 
+    for (unsigned int i = 0; i < log2((float)SIZE)-1; i++) {
+        cudaExtent _size = images_size_pointer[i+1].first;
+        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
+        int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
+        kernelConstructHPLevel<<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP, elementSizes[i], elementSizes[i+1], i == 0); 
     }
 }
-
