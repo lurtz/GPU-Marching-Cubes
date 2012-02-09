@@ -375,24 +375,24 @@ inline __host__ __device__ uint4 operator+=(uint4 a, uint4 b) {
     return a;
 }
 
-inline __device__ char* get_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size, unsigned char elementSize) {
-    // Store number of triangles
+template<typename T>
+inline __device__ T* get_voxel_address(cudaPitchedPtr cpptr, uint4 pos, int log2Size) {
     char* devPtr = (char*)cpptr.ptr;
     size_t pitch = cpptr.pitch;
     size_t slicePitch = pitch << log2Size;
     char* slice = devPtr + pos.z * slicePitch;
-    char* row = slice + pos.y * pitch;
-    return row + pos.x*elementSize;
+    T* row = (T*)(slice + pos.y * pitch);
+    return &row[pos.x];
 }
 
-inline __device__ uchar4 get_voxeluc4(cudaPitchedPtr cpptr, uint4 pos, int log2Size) {
-    // Store number of triangles
-    char* devPtr = (char*)cpptr.ptr;
-    size_t pitch = cpptr.pitch;
-    size_t slicePitch = pitch << log2Size;
-    char* slice = devPtr + pos.z * slicePitch;
-    uchar4* row = (uchar4*)(slice + pos.y * pitch);
-    return row[pos.x];
+template<typename T>
+inline __device__ T get_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size) {
+    return *get_voxel_address<T>(cpptr, pos, log2Size);
+}
+
+template<typename T>
+inline __device__ void write_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size, T value) {
+    *get_voxel_address<T>(cpptr, pos, log2Size) = value;
 }
 
 inline __device__ float3 mix(float3 x, float3 y, float a) {
@@ -426,12 +426,13 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
     }
 
     // Store number of triangles
-    uchar4* pos_ptr = (uchar4*)get_voxel(histoPyramid, pos, log2BlockWidth+log2CubeWidth, sizeof(uchar4));
-    *pos_ptr = ret_val;
+    write_voxel<uchar4>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
 }
 
 // possibly a huge fail
-__global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth, unsigned char readElementSize, unsigned char writeElementSize, bool vector) {    
+// TODO get rid of bool vector
+template<typename T>
+__global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth, bool vector) {
     uint4 writePos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
     uint4 readPos = writePos*2;
 
@@ -445,45 +446,44 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
         char* row = slice + tmpPos.y * pitch;
         // first level has uchar4 as datatype
         if (!vector)
-            writeValue += row[tmpPos.x*readElementSize];
+            writeValue += row[tmpPos.x*sizeof(T)];
         else
             writeValue += ((uchar4*)row)[tmpPos.x].x;
     }
 
     // next level has half side length
-    // hopefully this will write char, short and int
-    int* writePosPtr = (int*)get_voxel(writeHistoPyramid, writePos, log2BlockWidth-1 + log2CubeWidth, writeElementSize);
-    *writePosPtr = writeValue;
+    write_voxel<T>(writeHistoPyramid, writePos, log2BlockWidth-1 + log2CubeWidth, writeValue);
 }
 
-__device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int log2Size, unsigned char readElementSize, bool vector) {
+template<typename T>
+__device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int log2Size, bool vector) {
     int4 neighbors0;
     int4 neighbors1;
     if (!vector) {
         neighbors0 = make_int4(
-                *((int*)get_voxel(hp, current + cubeOffsets[0], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[1], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[2], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[3], log2Size, readElementSize))
+                get_voxel<T>(hp, current + cubeOffsets[0], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[1], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[2], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[3], log2Size)
         );
         neighbors1 = make_int4(
-                *((int*)get_voxel(hp, current + cubeOffsets[4], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[5], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[6], log2Size, readElementSize)),
-                *((int*)get_voxel(hp, current + cubeOffsets[7], log2Size, readElementSize))
+                get_voxel<T>(hp, current + cubeOffsets[4], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[5], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[6], log2Size),
+                get_voxel<T>(hp, current + cubeOffsets[7], log2Size)
         );
     } else {
         neighbors0 = make_int4(
-                get_voxeluc4(hp, current + cubeOffsets[0], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[1], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[2], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[3], log2Size).x 
+                get_voxel<uchar4>(hp, current + cubeOffsets[0], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[1], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[2], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[3], log2Size).x 
         );
         neighbors1 = make_int4(
-                get_voxeluc4(hp, current + cubeOffsets[4], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[5], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[6], log2Size).x, 
-                get_voxeluc4(hp, current + cubeOffsets[7], log2Size).x 
+                get_voxel<uchar4>(hp, current + cubeOffsets[4], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[5], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[6], log2Size).x, 
+                get_voxel<uchar4>(hp, current + cubeOffsets[7], log2Size).x 
         );
     }
 
@@ -547,29 +547,29 @@ __global__ void traverseHP(
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
 /*    if (size > 512)
-        cubePosition = scanHPLevel(target, hp9, cubePosition, log2Size-9, sizeof(unsigned int), false);
+        cubePosition = scanHPLevel<unsigned int>(target, hp9, cubePosition, log2Size-9, false);
     
     if (size > 256)
-        cubePosition = scanHPLevel(target, hp8, cubePosition, log2Size-8, sizeof(unsigned int), false);
+        cubePosition = scanHPLevel<unsigned int>(target, hp8, cubePosition, log2Size-8, false);
     
     if (size > 128)
-        cubePosition = scanHPLevel(target, hp7, cubePosition, log2Size-7, sizeof(unsigned int), false);
+        cubePosition = scanHPLevel<unsigned int>(target, hp7, cubePosition, log2Size-7, false);
 */    
     if (size > 64)
-        cubePosition = scanHPLevel(target, hp6, cubePosition, log2Size-6, sizeof(unsigned int), false);
+        cubePosition = scanHPLevel<unsigned int>(target, hp6, cubePosition, log2Size-6, false);
     
-    cubePosition = scanHPLevel(target, hp5, cubePosition, log2Size-5, sizeof(unsigned int), false);
-    cubePosition = scanHPLevel(target, hp4, cubePosition, log2Size-4, sizeof(unsigned short), false);
-    cubePosition = scanHPLevel(target, hp3, cubePosition, log2Size-3, sizeof(unsigned short), false);
-    cubePosition = scanHPLevel(target, hp2, cubePosition, log2Size-2, sizeof(unsigned short), false);
-    cubePosition = scanHPLevel(target, hp1, cubePosition, log2Size-1, sizeof(unsigned char), false);
-    cubePosition = scanHPLevel(target, hp0, cubePosition, log2Size, sizeof(uchar4), true);
+    cubePosition = scanHPLevel<unsigned int>(target, hp5, cubePosition, log2Size-5, false);
+    cubePosition = scanHPLevel<unsigned short>(target, hp4, cubePosition, log2Size-4, false);
+    cubePosition = scanHPLevel<unsigned short>(target, hp3, cubePosition, log2Size-3, false);
+    cubePosition = scanHPLevel<unsigned short>(target, hp2, cubePosition, log2Size-2, false);
+    cubePosition = scanHPLevel<unsigned char>(target, hp1, cubePosition, log2Size-1, false);
+    cubePosition = scanHPLevel<uchar4>(target, hp0, cubePosition, log2Size, true);
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
 
     char vertexNr = 0;
-    const uchar4 cubeData = get_voxeluc4(hp0, cubePosition, log2Size);
+    const uchar4 cubeData = get_voxel<uchar4>(hp0, cubePosition, log2Size);
 
     // seems to compute one triangle
     // max 5 triangles
@@ -580,19 +580,19 @@ __global__ void traverseHP(
 
         // Store vertex in VBO
         const float3 forwardDifference0 = make_float3(
-                (float)(-get_voxeluc4(hp0, make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
-                (float)(-get_voxeluc4(hp0, make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
-                (float)(-get_voxeluc4(hp0, make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size).z) 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size).z) 
             );
 
         const float3 forwardDifference1 = make_float3(
-                (float)(-get_voxeluc4(hp0, make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size).z), 
-                (float)(-get_voxeluc4(hp0, make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size).z), 
-                (float)(-get_voxeluc4(hp0, make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size).z + get_voxeluc4(hp0, make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size).z) 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size).z) 
             );
 
-        const int value0 = get_voxeluc4(hp0, make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
-        const float diff = (isolevel-value0) / (float)(get_voxeluc4(hp0, make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
+        const int value0 = get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
+        const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
 
