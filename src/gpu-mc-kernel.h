@@ -368,7 +368,11 @@ inline __host__ __device__ float3 operator+(float3 a, float3 b) {
 }
 
 inline __host__ __device__ uint4 operator+=(uint4 a, uint4 b) {
-    return make_uint4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); 
+    a.x += b.x;
+    a.y += b.y;
+    a.z += b.z;
+    a.w += b.w;
+    return a;
 }
 
 inline __device__ char* get_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size, unsigned char elementSize) {
