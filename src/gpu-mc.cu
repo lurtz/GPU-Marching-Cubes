@@ -16,7 +16,6 @@ unsigned char * rawDataPtr;
 // third to fifth (including) level contain unsigned short as elements
 // sixth level and more uses int
 std::vector<std::pair<cudaExtent, cudaPitchedPtr> > images_size_pointer;
-std::vector<unsigned char> elementSizes;
 
 int isolevel = 50;
 
@@ -32,39 +31,35 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     bufferSize.depth = SIZE;
     cudaMalloc3D(&tmpDataPtr, bufferSize);
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    elementSizes.push_back(sizeof(uchar4));
 
-    bufferSize.width = bufferSize.depth/2 * sizeof(unsigned char);
+    bufferSize.width = bufferSize.depth/2 * sizeof(uchar1);
     bufferSize.height = bufferSize.depth/2;
     bufferSize.depth = bufferSize.depth/2;
     cudaMalloc3D(&tmpDataPtr, bufferSize);
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-    elementSizes.push_back(sizeof(unsigned char));
 
     // And the third, fourth and fifth INT16
     for (unsigned int i = 0; i < 3; i++) {
-        bufferSize.width = bufferSize.depth/2 * sizeof(unsigned short);
+        bufferSize.width = bufferSize.depth/2 * sizeof(ushort1);
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
         cudaMalloc3D(&tmpDataPtr, bufferSize);
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-        elementSizes.push_back(sizeof(unsigned short));
     }
 
     // The rest will use INT32
     for(int i = 5; i < (log2((float)SIZE)); i++) {
-        bufferSize.width = bufferSize.depth/2 * sizeof(unsigned int);
+        bufferSize.width = bufferSize.depth/2 * sizeof(uint1);
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
         // Image cant be 1x1x1
         if (bufferSize.depth == 1) {
-            bufferSize.width = 2 * sizeof(unsigned int);
+            bufferSize.width = 2 * sizeof(uint1);
             bufferSize.height = 2;
             bufferSize.depth = 2;
         }
         cudaMalloc3D(&tmpDataPtr, bufferSize);
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
-        elementSizes.push_back(sizeof(unsigned int));
     }
 
     // Transfer dataset to device
@@ -91,14 +86,52 @@ void updateScalarField() {
 }
 
 void histoPyramidConstruction() {
+    // first level
     updateScalarField();
 
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
-    for (unsigned int i = 0; i < log2((float)SIZE)-1; i++) {
+    unsigned int i = 0;
+    // second level
+    if (i < log2((float)SIZE)-1) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP, elementSizes[i], elementSizes[i+1], i == 0); 
+        kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+    }
+    i++;
+
+    // third level
+    if (i < log2((float)SIZE)-1) {
+        cudaExtent _size = images_size_pointer[i+1].first;
+        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
+        int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
+        kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+    }
+    i++;
+
+    // fourth, fifth level
+    for (unsigned int j = 0; i < log2((float)SIZE)-1 && j < 2; i++, j++) {
+        cudaExtent _size = images_size_pointer[i+1].first;
+        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
+        int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
+        kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+    }
+
+    // sixth level
+    if (i < log2((float)SIZE)-1) {
+        cudaExtent _size = images_size_pointer[i+1].first;
+        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
+        int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
+        kernelConstructHPLevel<ushort4, uint1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+    }
+    i++;
+
+    // all other levels
+    for (; i < log2((float)SIZE)-1; i++) {
+        cudaExtent _size = images_size_pointer[i+1].first;
+        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
+        int log2GridSize = log2((unsigned int)_size.depth / CUBESIZEHP);
+        kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
     }
 }

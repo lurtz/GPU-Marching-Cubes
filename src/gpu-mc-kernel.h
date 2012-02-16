@@ -1,4 +1,5 @@
 #include <device_functions.h>
+#include <iostream>
 
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -429,63 +430,65 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
     write_voxel<uchar4>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
 }
 
-// possibly a huge fail
-// TODO get rid of bool vector
 template<typename T>
-__global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth, bool vector) {
+__device__ T make_vector() {
+    std::cout << "make_vector<> called but the specialization for this type does not exist" << std::endl;
+    exit(1);
+}
+
+template<>
+__device__ uchar1 make_vector<uchar1>() {
+    return make_uchar1(0);
+}
+
+template<>
+__device__ ushort1 make_vector<ushort1>() {
+    return make_ushort1(0);
+}
+
+template<>
+__device__ uint1 make_vector<uint1>() {
+    return make_uint1(0);
+}
+
+// possibly a huge fail
+template<typename T, typename Z>
+__global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth) {
     uint4 writePos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
     uint4 readPos = writePos*2;
 
     char* devPtr = (char*)readHistoPyramid.ptr;
     size_t pitch = readHistoPyramid.pitch;
     size_t slicePitch = pitch << (log2BlockWidth + log2CubeWidth);
-    int writeValue = 0;
+    Z writeValue = make_vector<Z>();
     for (unsigned int i = 0; i < 8; i++) {
         uint4 tmpPos = readPos+cubeOffsets[i];
         char* slice = devPtr + tmpPos.z * slicePitch;
         char* row = slice + tmpPos.y * pitch;
         // first level has uchar4 as datatype
-        if (!vector)
-            writeValue += row[tmpPos.x*sizeof(T)];
-        else
-            writeValue += ((uchar4*)row)[tmpPos.x].x;
+        writeValue.x += ((T*)row)[tmpPos.x].x;
     }
 
     // next level has half side length
-    write_voxel<T>(writeHistoPyramid, writePos, log2BlockWidth-1 + log2CubeWidth, writeValue);
+    write_voxel<Z>(writeHistoPyramid, writePos, log2BlockWidth-1 + log2CubeWidth, writeValue);
 }
 
 template<typename T>
-__device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int log2Size, bool vector) {
+__device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int log2Size) {
     int4 neighbors0;
     int4 neighbors1;
-    if (!vector) {
-        neighbors0 = make_int4(
-                get_voxel<T>(hp, current + cubeOffsets[0], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[1], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[2], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[3], log2Size)
-        );
-        neighbors1 = make_int4(
-                get_voxel<T>(hp, current + cubeOffsets[4], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[5], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[6], log2Size),
-                get_voxel<T>(hp, current + cubeOffsets[7], log2Size)
-        );
-    } else {
-        neighbors0 = make_int4(
-                get_voxel<uchar4>(hp, current + cubeOffsets[0], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[1], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[2], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[3], log2Size).x 
-        );
-        neighbors1 = make_int4(
-                get_voxel<uchar4>(hp, current + cubeOffsets[4], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[5], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[6], log2Size).x, 
-                get_voxel<uchar4>(hp, current + cubeOffsets[7], log2Size).x 
-        );
-    }
+    neighbors0 = make_int4(
+            get_voxel<T>(hp, current + cubeOffsets[0], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[1], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[2], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[3], log2Size).x
+    );
+    neighbors1 = make_int4(
+            get_voxel<T>(hp, current + cubeOffsets[4], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[5], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[6], log2Size).x,
+            get_voxel<T>(hp, current + cubeOffsets[7], log2Size).x
+    );
 
     int4 cmp0;
     int4 cmp1;
@@ -547,23 +550,23 @@ __global__ void traverseHP(
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
 /*    if (size > 512)
-        cubePosition = scanHPLevel<unsigned int>(target, hp9, cubePosition, log2Size-9, false);
+        cubePosition = scanHPLevel<int1>(target, hp9, cubePosition, log2Size-9);
     
     if (size > 256)
-        cubePosition = scanHPLevel<unsigned int>(target, hp8, cubePosition, log2Size-8, false);
+        cubePosition = scanHPLevel<int1>(target, hp8, cubePosition, log2Size-8);
     
     if (size > 128)
-        cubePosition = scanHPLevel<unsigned int>(target, hp7, cubePosition, log2Size-7, false);
+        cubePosition = scanHPLevel<int1>(target, hp7, cubePosition, log2Size-7);
 */    
     if (size > 64)
-        cubePosition = scanHPLevel<unsigned int>(target, hp6, cubePosition, log2Size-6, false);
+        cubePosition = scanHPLevel<int1>(target, hp6, cubePosition, log2Size-6);
     
-    cubePosition = scanHPLevel<unsigned int>(target, hp5, cubePosition, log2Size-5, false);
-    cubePosition = scanHPLevel<unsigned short>(target, hp4, cubePosition, log2Size-4, false);
-    cubePosition = scanHPLevel<unsigned short>(target, hp3, cubePosition, log2Size-3, false);
-    cubePosition = scanHPLevel<unsigned short>(target, hp2, cubePosition, log2Size-2, false);
-    cubePosition = scanHPLevel<unsigned char>(target, hp1, cubePosition, log2Size-1, false);
-    cubePosition = scanHPLevel<uchar4>(target, hp0, cubePosition, log2Size, true);
+    cubePosition = scanHPLevel<int1>(target, hp5, cubePosition, log2Size-5);
+    cubePosition = scanHPLevel<short1>(target, hp4, cubePosition, log2Size-4);
+    cubePosition = scanHPLevel<short1>(target, hp3, cubePosition, log2Size-3);
+    cubePosition = scanHPLevel<short1>(target, hp2, cubePosition, log2Size-2);
+    cubePosition = scanHPLevel<char1>(target, hp1, cubePosition, log2Size-1);
+    cubePosition = scanHPLevel<uchar4>(target, hp0, cubePosition, log2Size);
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
