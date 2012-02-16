@@ -106,10 +106,11 @@ int prepareDataset(unsigned char ** voxels, int sizeX, int sizeY, int sizeZ) {
     return size;
 }
 
-double vector_distance(int center[], int x, int y, int z) {
-  int diff_x = center[0] - x;
-  int diff_y = center[1] - y;
-  int diff_z = center[2] - z;
+template<typename T>
+double vector_distance(T center[], T x, T y, T z) {
+  T diff_x = center[0] - x;
+  T diff_y = center[1] - y;
+  T diff_z = center[2] - z;
   return sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
 }
 
