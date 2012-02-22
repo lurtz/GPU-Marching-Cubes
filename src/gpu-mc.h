@@ -1,3 +1,8 @@
+#ifndef gpu_mc_h__
+#define gpu_mc_h__
+
+#define DEBUG
+
 // loads voxeldata onto the gpu
 // voxels needs to be cubic with sidelength of a power of 2
 void setupCuda(unsigned char * voxels, unsigned int size);
@@ -9,3 +14,5 @@ bool testUpdateScalarField(unsigned char * voxels);
 
 // calculates the total number of triangles needed
 void histoPyramidConstruction();
+
+#endif // gpu_mc_h__

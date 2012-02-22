@@ -11,7 +11,9 @@ unsigned int SIZE;
 unsigned int rawMemSize;
 unsigned char * rawDataPtr;
 
+#ifdef DEBUG
 unsigned int sum_of_triangles = 0;
+#endif
 
 // first level has char4 as datatype, which contains: (number of triangles, cube index, value of first cube element, 0)
 // first to second level contain volumes with unsigned char as elements
@@ -88,6 +90,7 @@ void updateScalarField() {
     kernelClassifyCubes<<<grid , block>>>(images_size_pointer[0].second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
 }
 
+#ifdef DEBUG
 // code to test classify cubes
 unsigned int get_index(unsigned int x, unsigned int y, unsigned int z) {
   return x + y*SIZE + z*SIZE*SIZE;
@@ -171,6 +174,7 @@ bool testUpdateScalarField(unsigned char * voxels) {
     return true;
 }
 // end of code to test classifycubes
+#endif // DEBUG
 
 void histoPyramidConstruction() {
     // first level
