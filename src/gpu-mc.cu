@@ -11,6 +11,8 @@ unsigned int SIZE;
 unsigned int rawMemSize;
 unsigned char * rawDataPtr;
 
+unsigned int sum_of_triangles = 0;
+
 // first level has char4 as datatype, which contains: (number of triangles, cube index, value of first cube element, 0)
 // first to second level contain volumes with unsigned char as elements
 // third to fifth (including) level contain unsigned short as elements
@@ -111,6 +113,8 @@ uint4 lokalCubeOffsets[8] = {
 		{1, 1, 1, 0},
 	}; 
 
+unsigned char lokalNrOfTriangles[256] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 2, 3, 4, 4, 3, 3, 4, 4, 3, 4, 5, 5, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 2, 3, 3, 4, 3, 4, 2, 3, 3, 4, 4, 5, 4, 5, 3, 2, 3, 4, 4, 3, 4, 5, 3, 2, 4, 5, 5, 4, 5, 2, 4, 1, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 2, 4, 3, 4, 3, 5, 2, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 3, 4, 4, 3, 4, 5, 5, 4, 4, 3, 5, 2, 5, 4, 2, 1, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 2, 3, 3, 2, 3, 4, 4, 5, 4, 5, 5, 2, 4, 3, 5, 4, 3, 2, 4, 1, 3, 4, 4, 5, 4, 5, 3, 4, 4, 5, 5, 2, 3, 4, 2, 1, 2, 3, 3, 2, 3, 4, 2, 1, 3, 2, 4, 1, 2, 1, 1, 0};
+
 bool testUpdateScalarField(unsigned char * voxels) {
     // get level0 data from gpu
     uchar4 * lvl0_data = new uchar4[SIZE*SIZE*SIZE];
@@ -121,6 +125,8 @@ bool testUpdateScalarField(unsigned char * voxels) {
     parms.extent = images_size_pointer[0].first;
     parms.kind = cudaMemcpyDeviceToHost;
     cudaMemcpy3D(&parms);
+
+    sum_of_triangles = 0;
 
     // calc for each voxel index and number of triangles using a different implementation
     for (unsigned int i = 0; i < (SIZE-1)*(SIZE-1)*(SIZE-1); i++) {
@@ -136,14 +142,31 @@ bool testUpdateScalarField(unsigned char * voxels) {
             bool greater = voxel > isolevel;
             lookuptable_index |= greater << id;
         }
+        unsigned int num_triangles = lokalNrOfTriangles[lookuptable_index];
+        sum_of_triangles += num_triangles;
 
         // compare with results from gpu
+        if (voxels[get_index(x, y, z)] != lvl0_data[get_index(x, y, z)].z) {
+            std::cout << "No match at position: (" << x << ", " << y << ", " << z << ")" << std::endl;
+            std::cout << "vertex value got from raw data is: " << static_cast<int>(voxels[get_index(x, y, z)]) << "\n value saved on gpu is: " << static_cast<int>(lvl0_data[get_index(x, y, z)].z) << std::endl;
+            return false;
+        }
+
         if (lookuptable_index != lvl0_data[get_index(x, y, z)].y) {
             std::cout << "No match at position: (" << x << ", " << y << ", " << z << ")" << std::endl;
             std::cout << "cube index calculated in software: " << lookuptable_index << "\ncube index calculated in hardware: " << static_cast<int>((lvl0_data[get_index(x, y, z)].y)) << std::endl;
-//            return false;
+            return false;
+        }
+
+        if (num_triangles != lvl0_data[get_index(x, y, z)].x) {
+            std::cout << "No match in number of triangles at position: (" << x << ", " << y << ", " << z << ")" << std::endl;
+            std::cout << "number triangles calculated in software: " << num_triangles << "\nnumber of triangles calculated in hardware: " << static_cast<int>((lvl0_data[get_index(x, y, z)].x)) << std::endl;
+            return false;
         }
     }
+
+    std::cout << "you will get " << sum_of_triangles << " triangles" << std::endl;
+
     delete [] lvl0_data;
     return true;
 }
