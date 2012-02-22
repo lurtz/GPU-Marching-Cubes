@@ -66,7 +66,7 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     rawMemSize = SIZE*SIZE*SIZE*sizeof(unsigned char);
     cudaMalloc((void **) &rawDataPtr, rawMemSize);
     cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice);
-    delete[] voxels;
+//    delete[] voxels;
 }
 
 template<typename T>
@@ -85,6 +85,69 @@ void updateScalarField() {
     int log2GridSize = log2(_size.depth / CUBESIZE);
     kernelClassifyCubes<<<grid , block>>>(images_size_pointer[0].second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
 }
+
+// code to test classify cubes
+unsigned int get_index(unsigned int x, unsigned int y, unsigned int z) {
+  return x + y*SIZE + z*SIZE*SIZE;
+}
+
+void get_voxel_from_cube_id(unsigned int cube_id, unsigned int *x, unsigned int *y, unsigned *z) {
+  // return lower left position of cube, other points can be obtained with +0,1
+  *z = cube_id / (SIZE-1) / (SIZE-1);
+  unsigned int cube_id_plane = cube_id % ((SIZE-1) * (SIZE-1));
+  *y = cube_id_plane / (SIZE-1);
+  *x = cube_id_plane % (SIZE-1);
+}
+
+char bit2Offset[] = {0, 1, 3, 2, 4, 5, 7, 6};
+uint4 lokalCubeOffsets[8] = {
+		{0, 0, 0, 0},
+		{1, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 0, 1, 0},
+		{0, 1, 0, 0},
+		{1, 1, 0, 0},
+		{0, 1, 1, 0},
+		{1, 1, 1, 0},
+	}; 
+
+bool testUpdateScalarField(unsigned char * voxels) {
+    // get level0 data from gpu
+    uchar4 * lvl0_data = new uchar4[SIZE*SIZE*SIZE];
+    cudaPitchedPtr h_pitched_ptr = make_cudaPitchedPtr(lvl0_data, SIZE*sizeof(uchar4), SIZE, SIZE);
+    struct cudaMemcpy3DParms parms = {0};
+    parms.srcPtr = images_size_pointer[0].second;
+    parms.dstPtr = h_pitched_ptr;
+    parms.extent = images_size_pointer[0].first;
+    parms.kind = cudaMemcpyDeviceToHost;
+    cudaMemcpy3D(&parms);
+
+    // calc for each voxel index and number of triangles using a different implementation
+    for (unsigned int i = 0; i < (SIZE-1)*(SIZE-1)*(SIZE-1); i++) {
+        // get base voxel of the cube
+        unsigned int x, y, z;
+        get_voxel_from_cube_id(i, &x, &y, &z);  
+        // look which vertices are below or above our threshold
+        int lookuptable_index = 0;
+
+        for (unsigned int id = 0; id < 8; id++) {
+            uint4 offset = lokalCubeOffsets[bit2Offset[id]];
+            unsigned char voxel = voxels[get_index(x + offset.x, y + offset.y, z + offset.z)];
+            bool greater = voxel > isolevel;
+            lookuptable_index |= greater << id;
+        }
+
+        // compare with results from gpu
+        if (lookuptable_index != lvl0_data[get_index(x, y, z)].y) {
+            std::cout << "No match at position: (" << x << ", " << y << ", " << z << ")" << std::endl;
+            std::cout << "cube index calculated in software: " << lookuptable_index << "\ncube index calculated in hardware: " << static_cast<int>((lvl0_data[get_index(x, y, z)].y)) << std::endl;
+//            return false;
+        }
+    }
+    delete [] lvl0_data;
+    return true;
+}
+// end of code to test classifycubes
 
 void histoPyramidConstruction() {
     // first level

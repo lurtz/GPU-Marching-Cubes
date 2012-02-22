@@ -1,6 +1,7 @@
 #include "rawUtilities.h"
 #include "gpu-mc.h"
 #include <string>
+#include <iostream>
 
 int main(int argc, char * argv[]) {
   int stepSizeX = 1;
@@ -32,8 +33,12 @@ int main(int argc, char * argv[]) {
 //  setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
   setupCuda(voxel_data_ptr, size);
   updateScalarField();
-  histoPyramidConstruction();
+  bool success = testUpdateScalarField(voxel_data_ptr);
+  std::cout << "no segfault here" << std::endl << std::endl;;
+  
+//  histoPyramidConstruction();
 //  run();
 
+  delete [] voxel_data_ptr; 
   return 0;
 }
