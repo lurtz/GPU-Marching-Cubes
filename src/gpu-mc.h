@@ -16,5 +16,8 @@ bool testUpdateScalarField(unsigned char * voxels);
 
 // calculates the total number of triangles needed
 void histoPyramidConstruction();
+#ifdef DEBUG
+bool testHistoPyramidConstruction();
+#endif // DEBUG
 
 #endif // gpu_mc_h__

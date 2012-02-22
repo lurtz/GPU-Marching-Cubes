@@ -23,6 +23,15 @@ std::vector<std::pair<cudaExtent, cudaPitchedPtr> > images_size_pointer;
 
 int isolevel = 50;
 
+template<typename T>
+T log2(T val) {
+    T log2Val = 0;
+    while (val > 1) {
+      val /= 2; log2Val++;
+    }
+    return log2Val;
+}
+
 void setupCuda(unsigned char * voxels, unsigned int size) {
     SIZE = size;
 
@@ -52,7 +61,7 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     }
 
     // The rest will use INT32
-    for(int i = 5; i < (log2((float)SIZE)); i++) {
+    for(int i = 5; i < (log2(SIZE)); i++) {
         bufferSize.width = bufferSize.depth/2 * sizeof(uint1);
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
@@ -71,15 +80,6 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     cudaMalloc((void **) &rawDataPtr, rawMemSize);
     cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice);
 //    delete[] voxels;
-}
-
-template<typename T>
-T log2(T val) {
-    T log2Val = 0;
-    while (val > 1) {
-      val /= 2; log2Val++;
-    }
-    return log2Val;
 }
 
 void updateScalarField() {
@@ -184,7 +184,7 @@ void histoPyramidConstruction() {
     
     unsigned int i = 0;
     // second level
-    if (i < log2((float)SIZE)-1) {
+    if (i < log2(SIZE)-1) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
@@ -193,7 +193,7 @@ void histoPyramidConstruction() {
     i++;
 
     // third level
-    if (i < log2((float)SIZE)-1) {
+    if (i < log2(SIZE)-1) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
@@ -202,7 +202,7 @@ void histoPyramidConstruction() {
     i++;
 
     // fourth, fifth level
-    for (unsigned int j = 0; i < log2((float)SIZE)-1 && j < 2; i++, j++) {
+    for (unsigned int j = 0; i < log2(SIZE)-1 && j < 2; i++, j++) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
@@ -210,7 +210,7 @@ void histoPyramidConstruction() {
     }
 
     // sixth level
-    if (i < log2((float)SIZE)-1) {
+    if (i < log2(SIZE)-1) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
@@ -219,10 +219,16 @@ void histoPyramidConstruction() {
     i++;
 
     // all other levels
-    for (; i < log2((float)SIZE)-1; i++) {
+    for (; i < log2(SIZE)-1; i++) {
         cudaExtent _size = images_size_pointer[i+1].first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
         kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer[i].second , images_size_pointer[i+1].second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
     }
 }
+
+#ifdef DEBUG
+bool testHistoPyramidConstruction() {
+   return true; 
+}
+#endif // DEBUG
