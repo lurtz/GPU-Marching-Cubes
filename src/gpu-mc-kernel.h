@@ -430,27 +430,6 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
     write_voxel<uchar4>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
 }
 
-template<typename T>
-__device__ T make_vector() {
-//    printf("make_vector<> called but the specialization for this type does not exist\n");
-    exit(1);
-}
-
-template<>
-__device__ uchar1 make_vector<uchar1>() {
-    return make_uchar1(0);
-}
-
-template<>
-__device__ ushort1 make_vector<ushort1>() {
-    return make_ushort1(0);
-}
-
-template<>
-__device__ uint1 make_vector<uint1>() {
-    return make_uint1(0);
-}
-
 // possibly a huge fail
 template<typename T, typename Z>
 __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth) {
@@ -460,7 +439,8 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
     char* devPtr = (char*)readHistoPyramid.ptr;
     size_t pitch = readHistoPyramid.pitch;
     size_t slicePitch = pitch << (log2BlockWidth + log2CubeWidth);
-    Z writeValue = make_vector<Z>();
+//    Z writeValue = make_vector<Z>();
+    Z writeValue = {0};
     for (unsigned int i = 0; i < 8; i++) {
         uint4 tmpPos = readPos+cubeOffsets[i];
         char* slice = devPtr + tmpPos.z * slicePitch;
