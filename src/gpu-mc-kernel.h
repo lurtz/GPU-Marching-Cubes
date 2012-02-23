@@ -1,5 +1,5 @@
 #include <device_functions.h>
-#include <iostream>
+//#include <iostream>
 
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -432,7 +432,7 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
 
 template<typename T>
 __device__ T make_vector() {
-    std::cout << "make_vector<> called but the specialization for this type does not exist" << std::endl;
+//    printf("make_vector<> called but the specialization for this type does not exist\n");
     exit(1);
 }
 
