@@ -34,10 +34,12 @@ int main(int argc, char * argv[]) {
   setupCuda(voxel_data_ptr, size);
   updateScalarField();
   bool success = testUpdateScalarField(voxel_data_ptr);
-  std::cout << "no segfault here" << std::endl << std::endl;;
   
-//  histoPyramidConstruction();
+  histoPyramidConstruction();
+  success &= testHistoPyramidConstruction();
 //  run();
+
+  std::cout << "no segfault here" << std::endl << std::endl;;
 
   delete [] voxel_data_ptr; 
   return 0;
