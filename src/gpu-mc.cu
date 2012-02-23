@@ -122,7 +122,7 @@ unsigned char lokalNrOfTriangles[256] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 
 template<typename T>
 T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
     T * lvl0_data = new T[size.depth*size.depth*size.depth];
-    cudaPitchedPtr h_pitched_ptr = make_cudaPitchedPtr(lvl0_data, size.depth*sizeof(uchar4), size.depth, size.depth);
+    cudaPitchedPtr h_pitched_ptr = make_cudaPitchedPtr(lvl0_data, size.depth*sizeof(T), size.depth, size.depth);
     struct cudaMemcpy3DParms parms = {0};
     parms.srcPtr = source;
     parms.dstPtr = h_pitched_ptr;
