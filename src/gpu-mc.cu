@@ -2,6 +2,7 @@
 #include "gpu-mc-kernel.h"
 #include <utility>
 #include <vector>
+#include <iostream>
 
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
@@ -198,48 +199,25 @@ void histoPyramidConstruction() {
 
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
-    unsigned int i = 0;
-    // second level
-    if (i < log2(SIZE)-1) {
+    for (unsigned int i = 0; i < log2(SIZE)-1; i++) {
         cudaExtent _size = images_size_pointer.at(i+1).first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-    }
-    i++;
-
-    // third level
-    if (i < log2(SIZE)-1) {
-        cudaExtent _size = images_size_pointer.at(i+1).first;
-        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-    }
-    i++;
-
-    // fourth, fifth level
-    for (unsigned int j = 0; i < log2(SIZE)-1 && j < 2; i++, j++) {
-        cudaExtent _size = images_size_pointer.at(i+1).first;
-        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-    }
-
-    // sixth level
-    if (i < log2(SIZE)-1) {
-        cudaExtent _size = images_size_pointer.at(i+1).first;
-        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<ushort4, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-    }
-    i++;
-
-    // all other levels
-    for (; i < log2(SIZE)-1; i++) {
-        cudaExtent _size = images_size_pointer.at(i+1).first;
-        dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
-        int log2GridSize = log2(_size.depth / CUBESIZEHP);
-        kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+        if (i == 0)
+            // second level
+            kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP);
+        else if (i == 1)
+            // third level
+            kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+        else if (i > 1 && i < 4)
+            // fourth, fifth level
+            kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+        else if (i == 5)
+            // sixth level
+            kernelConstructHPLevel<ushort1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+        else
+            // all other levels
+            kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
     }
 }
 
@@ -252,7 +230,10 @@ bool templatedTestHistoPyramidConstruction(unsigned int level) {
     for (unsigned int id = 0; id < pair.first.depth*pair.first.depth*pair.first.depth; id++) {
         sum+= sum_of_triangles_from_gpu[id].x;
     }
+    delete [] sum_of_triangles_from_gpu;
+    sum_of_triangles_from_gpu = 0;
     if (sum != sum_of_triangles) {
+        std::cout << "at level " << level << std::endl;
         std::cout << "number of triangles calculated in software and hardware mismatches!" << std::endl;
         std::cout << "software: " << sum_of_triangles << ", hardware: " << sum << std::endl;
     }
@@ -260,13 +241,17 @@ bool templatedTestHistoPyramidConstruction(unsigned int level) {
 }
 
 bool testHistoPyramidConstruction() {
-    unsigned int level = log2(SIZE);
-    if (level == 0)
-        return templatedTestHistoPyramidConstruction<uchar4>(level);
-    if (level == 1)
-        return templatedTestHistoPyramidConstruction<uchar1>(level);
-    if (level > 1 && level < 5)
-        return templatedTestHistoPyramidConstruction<ushort1>(level);
-    return templatedTestHistoPyramidConstruction<uint1>(level);
+    bool success = true;
+    for (unsigned int i = 0; i < log2(SIZE); i++) {
+        if (i == 0)
+            success &= templatedTestHistoPyramidConstruction<uchar4>(i);
+        else if (i == 1)
+            success &= templatedTestHistoPyramidConstruction<uchar1>(i);
+        else if (i > 1 && i < 5)
+            success &= templatedTestHistoPyramidConstruction<ushort1>(i);
+        else
+            success &= templatedTestHistoPyramidConstruction<uint1>(i);
+    }
+    return success;
 }
 #endif // DEBUG
