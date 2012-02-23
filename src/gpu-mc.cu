@@ -33,6 +33,16 @@ T log2(T val) {
     return log2Val;
 }
 
+bool handleCudaError(const cudaError_t& status) {
+    if (status == cudaErrorInvalidValue) {
+        std::cout << "cudaErrorInvalidValue" << std::endl;
+    }
+    if (status == cudaErrorInvalidDevicePointer) {
+        std::cout << "cudaErrorInvalidDevidePointer" << std::endl;
+    }
+    return status != cudaSuccess;
+}
+
 void setupCuda(unsigned char * voxels, unsigned int size) {
     SIZE = size;
 
@@ -44,12 +54,14 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
     bufferSize.height = SIZE;
     bufferSize.depth = SIZE;
     cudaMalloc3D(&tmpDataPtr, bufferSize);
+    handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
     bufferSize.width = bufferSize.depth/2 * sizeof(uchar1);
     bufferSize.height = bufferSize.depth/2;
     bufferSize.depth = bufferSize.depth/2;
     cudaMalloc3D(&tmpDataPtr, bufferSize);
+    handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
     // And the third, fourth and fifth INT16
@@ -58,6 +70,7 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
         cudaMalloc3D(&tmpDataPtr, bufferSize);
+        handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
@@ -73,6 +86,7 @@ void setupCuda(unsigned char * voxels, unsigned int size) {
             bufferSize.depth = 2;
         }
         cudaMalloc3D(&tmpDataPtr, bufferSize);
+        handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
