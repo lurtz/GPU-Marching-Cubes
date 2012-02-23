@@ -34,8 +34,11 @@ int main(int argc, char * argv[]) {
   setupCuda(voxel_data_ptr, size);
   updateScalarField();
   bool success = testUpdateScalarField(voxel_data_ptr);
-  
+
+  std::cout << "before construction of histopyramid:" << std::endl;
+  testHistoPyramidConstruction();
   histoPyramidConstruction();
+  std::cout << std::endl << "after construction of histopyramid:" << std::endl;
   success &= testHistoPyramidConstruction();
 //  run();
 
