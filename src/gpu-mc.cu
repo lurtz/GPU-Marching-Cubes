@@ -3,6 +3,7 @@
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <cassert>
 
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
@@ -295,8 +296,18 @@ bool testHistoPyramidConstruction() {
 #endif // DEBUG
 
 void histoPyramidTraversal() {
+    unsigned int sum = 0;
+    assert(log2(SIZE) == images_size_pointer.size());
+    size_t num_of_levels = images_size_pointer.size();
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
-    unsigned int sum = sum_3d_array(pair);
+    if (num_of_levels == 1)
+        sum = sum_3d_array<uchar4>(pair);
+    else if (num_of_levels == 2)
+        sum = sum_3d_array<uchar1>(pair);
+    else if (num_of_levels == 3 || num_of_levels == 4 || num_of_levels == 5)
+        sum = sum_3d_array<ushort1>(pair);
+    else
+        sum = sum_3d_array<uint1>(pair);
     // TODO to get this working I need to setup OpenGL with VBO
     //      resolve the issue with the limited arguments size of the kernel
     //      since OpenGL over SSH is hard, maybe I can just write into an array
