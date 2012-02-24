@@ -35,14 +35,13 @@ int main(int argc, char * argv[]) {
   updateScalarField();
   bool success = testUpdateScalarField(voxel_data_ptr);
 
-  std::cout << "before construction of histopyramid:" << std::endl;
-  testHistoPyramidConstruction();
   histoPyramidConstruction();
-  std::cout << std::endl << "after construction of histopyramid:" << std::endl;
   success &= testHistoPyramidConstruction();
 //  run();
 
-  std::cout << "no segfault here" << std::endl << std::endl;;
+  std::cout << "no segfault here" << std::endl;
+  if (!success)
+    std::cout << "something with the tests went wrong" << std::endl;
 
   delete [] voxel_data_ptr; 
   return 0;
