@@ -213,24 +213,32 @@ void histoPyramidConstruction() {
 
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
+    // i=    0       1        2        3        4      5
+    // uchar4, uchar1, ushort1, ushort1, ushort1, uint1, ...
     for (unsigned int i = 0; i < log2(SIZE)-1; i++) {
         cudaExtent _size = images_size_pointer.at(i+1).first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
         if (i == 0)
             // second level
+            // uchar4 -> uchar1
             kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP);
         else if (i == 1)
             // third level
+            // uchar1 -> ushort1
             kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-        else if (i > 1 && i < 4)
+        else if (i == 2 || i == 3)
             // fourth, fifth level
+            // ushort1 -> ushort1
+            // ushort1 -> ushort1
             kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
-        else if (i == 5)
+        else if (i == 4)
             // sixth level
+            // ushort1 -> uint1
             kernelConstructHPLevel<ushort1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
         else
             // all other levels
+            // uint1 -> uint1
             kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
     }
 }
