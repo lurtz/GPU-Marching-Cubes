@@ -311,6 +311,10 @@ __device__ __constant__  char triTable[4096] =
 0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
+// tells histogramtraversal how much levels we have and thus how much parameters it has
+__constant__ size_t num_of_levels;
+__constant__ cudaPitchedPtr levels[10];
+
 __device__ uint4 getPosFromGrid(const uint3 blockIndex, const uint3 threadIndex, int log2BlockWidth, int mask, int log2CubeWidth) {
     int blkX = blockIndex.y;
     int blkY = blockIndex.x >> log2BlockWidth;
