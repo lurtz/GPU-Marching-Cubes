@@ -332,14 +332,6 @@ __device__ unsigned int getId(uint4 pos, int log2BlockWidth, int log2CubeWidth) 
     return (((pos.z << log2Sum) + pos.y) << log2Sum) + pos.x;
 }
 
-__device__ int4 getPosFromId(unsigned int id, int size) {
-  int z = id / (size * size);
-  id = id % (size * size);
-  int y = id / size;
-  int x = id % size;
-  return make_int4(x, y, z, 0);
-}
-
 // addition
 inline __host__ __device__ uchar4 operator+(uchar4 a, uchar4 b) {
     return make_uchar4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
@@ -439,18 +431,16 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
     char* devPtr = (char*)readHistoPyramid.ptr;
     size_t pitch = readHistoPyramid.pitch;
     size_t slicePitch = pitch << (log2BlockWidth + log2CubeWidth);
-//    Z writeValue = make_vector<Z>();
     Z writeValue = {0};
     for (unsigned int i = 0; i < 8; i++) {
         uint4 tmpPos = readPos+cubeOffsets[i];
         char* slice = devPtr + tmpPos.z * slicePitch;
-        char* row = slice + tmpPos.y * pitch;
+        T* row = (T*)(slice + tmpPos.y * pitch);
         // first level has uchar4 as datatype
-        writeValue.x += ((T*)row)[tmpPos.x].x;
+        writeValue.x += row[tmpPos.x].x;
     }
 
-    // next level has half side length
-    write_voxel<Z>(writeHistoPyramid, writePos, log2BlockWidth-1 + log2CubeWidth, writeValue);
+    write_voxel<Z>(writeHistoPyramid, writePos, log2BlockWidth + log2CubeWidth, writeValue);
 }
 
 template<typename T>
