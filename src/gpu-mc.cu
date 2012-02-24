@@ -35,12 +35,33 @@ T log2(T val) {
 }
 
 bool handleCudaError(const cudaError_t& status) {
-    if (status == cudaErrorInvalidValue) {
-        std::cout << "cudaErrorInvalidValue" << std::endl;
+    std::string error_msg;
+    switch (status) {
+        case cudaErrorInvalidValue: {
+            error_msg = "cudaErrorInvalidValue";
+            break;
+        }
+        case cudaErrorInvalidDevicePointer: {
+            error_msg = "cudaErrorInvalidDevidePointer";
+            break;
+        }
+        case cudaErrorInvalidSymbol: {
+            error_msg = "cudaErrorInvalidSymbol";
+            break;
+        }
+        case cudaErrorInvalidMemcpyDirection: {
+            error_msg = "cudaErrorInvalidMemcpyDirection";
+            break;
+        }
+        default: {
+            error_msg = "unknown error";
+            break;
+        }
     }
-    if (status == cudaErrorInvalidDevicePointer) {
-        std::cout << "cudaErrorInvalidDevidePointer" << std::endl;
-    }
+    
+    if (status != cudaSuccess)
+        std::cout << error_msg << std::endl;
+
     return status != cudaSuccess;
 }
 
@@ -308,6 +329,17 @@ void histoPyramidTraversal() {
         sum = sum_3d_array<ushort1>(pair);
     else
         sum = sum_3d_array<uint1>(pair);
+
+    handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
+
+    size_t num_of_levels_readback = 0;
+    handleCudaError(cudaMemcpyFromSymbol(&num_of_levels_readback, "num_of_levels", sizeof(size_t), 0, cudaMemcpyDeviceToHost));
+
+    assert(num_of_levels == num_of_levels_readback);
+
+    for (unsigned int i = 0; i < num_of_levels; i++) {
+        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
+    }
     // TODO to get this working I need to setup OpenGL with VBO
     //      resolve the issue with the limited arguments size of the kernel
     //      since OpenGL over SSH is hard, maybe I can just write into an array
