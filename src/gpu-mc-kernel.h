@@ -422,7 +422,7 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
     write_voxel<uchar4>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
 }
 
-// possibly a huge fail
+// now tested and seems to work
 template<typename T, typename Z>
 __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth) {
     uint4 writePos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
@@ -430,7 +430,8 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
 
     char* devPtr = (char*)readHistoPyramid.ptr;
     size_t pitch = readHistoPyramid.pitch;
-    size_t slicePitch = pitch << (log2BlockWidth + log2CubeWidth);
+    // source array has double side lengths
+    size_t slicePitch = pitch << (log2BlockWidth + 1 + log2CubeWidth);
     Z writeValue = {0};
     for (unsigned int i = 0; i < 8; i++) {
         uint4 tmpPos = readPos+cubeOffsets[i];
