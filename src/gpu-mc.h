@@ -20,4 +20,7 @@ void histoPyramidConstruction();
 bool testHistoPyramidConstruction();
 #endif // DEBUG
 
+// creates the VBO
+void histoPyramidTraversal();
+
 #endif // gpu_mc_h__

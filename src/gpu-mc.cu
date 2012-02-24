@@ -243,17 +243,33 @@ void histoPyramidConstruction() {
     }
 }
 
+template<typename T>
+unsigned int sum_3d_array(T const * const _3darray, const cudaExtent& dim) {
+    unsigned int sum = 0;
+    for (unsigned int id = 0; id < dim.depth*dim.depth*dim.depth; id++) {
+        sum+= _3darray[id].x;
+    }
+    return sum;
+}
+
+template<typename T>
+unsigned int sum_3d_array(const std::pair<cudaExtent, cudaPitchedPtr>& pair) {
+    T* sum_of_triangles_from_gpu = get_data_from_pitched_ptr<T>(pair);
+    unsigned int sum = sum_3d_array(sum_of_triangles_from_gpu, pair.first);
+    delete [] sum_of_triangles_from_gpu;
+    return sum;
+}
+
+template<typename T>
+unsigned int sum_3d_array(unsigned int level) {
+    std::pair<cudaExtent, cudaPitchedPtr> pair = images_size_pointer.at(level);
+    return sum_3d_array<T>(pair);
+}
+
 #ifdef DEBUG
 template<typename T>
 bool templatedTestHistoPyramidConstruction(unsigned int level) {
-    std::pair<cudaExtent, cudaPitchedPtr> pair = images_size_pointer.at(level);
-    T* sum_of_triangles_from_gpu = get_data_from_pitched_ptr<T>(pair);
-    unsigned int sum = 0;
-    for (unsigned int id = 0; id < pair.first.depth*pair.first.depth*pair.first.depth; id++) {
-        sum+= sum_of_triangles_from_gpu[id].x;
-    }
-    delete [] sum_of_triangles_from_gpu;
-    sum_of_triangles_from_gpu = 0;
+    unsigned int sum = sum_3d_array<T>(level);
     if (sum != sum_of_triangles) {
         std::cout << "at level " << level << std::endl;
         std::cout << "number of triangles calculated in software and hardware mismatches!" << std::endl;
@@ -277,3 +293,11 @@ bool testHistoPyramidConstruction() {
     return success;
 }
 #endif // DEBUG
+
+void histoPyramidTraversal() {
+    std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
+    unsigned int sum = sum_3d_array(pair);
+    // TODO to get this working I need to setup OpenGL with VBO
+    //      resolve the issue with the limited arguments size of the kernel
+    //      since OpenGL over SSH is hard, maybe I can just write into an array
+}
