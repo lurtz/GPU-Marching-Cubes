@@ -39,6 +39,7 @@ int main(int argc, char * argv[]) {
   success &= testHistoPyramidConstruction();
 
   histoPyramidTraversal();
+  success &= testHistoPyramidTraversal();
 //  run();
 
   std::cout << "no segfault here" << std::endl;
