@@ -448,8 +448,21 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
     write_voxel<Z>(writeHistoPyramid, writePos, log2BlockWidth + log2CubeWidth, writeValue);
 }
 
+#ifdef DEBUG
+__global__ void sum_values_of_pitched_ptr(unsigned int * d_sum, int size, int log2Size) {
+    cudaPitchedPtr cpptr = levels[num_of_levels-1];
+    *d_sum = 0;
+    for (unsigned int x = 0; x < size; x++)
+        for (unsigned int y = 0; y < size; y++)
+            for (unsigned int z = 0; z < size; z++) {
+                uint4 pos = make_uint4(x, y, z, 0);
+                *d_sum += get_voxel<uint1>(cpptr, pos, log2Size).x;
+            }
+}
+#endif // DEBUG
+
 template<typename T>
-__device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int log2Size) {
+__device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 current, int log2Size) {
     int4 neighbors0;
     int4 neighbors1;
     neighbors0 = make_int4(
@@ -500,16 +513,6 @@ __device__ uint4 scanHPLevel(int target, cudaPitchedPtr hp, uint4 current, int l
 }
 
 __global__ void traverseHP(
-        cudaPitchedPtr hp0, // Largest HP
-        cudaPitchedPtr hp1,
-        cudaPitchedPtr hp2,
-        cudaPitchedPtr hp3,
-        cudaPitchedPtr hp4,
-        cudaPitchedPtr hp5,
-        cudaPitchedPtr hp6,
-/*        cudaPitchedPtr hp7,  // well well I hit a limit of argument size in bytes, only up to 256 bytes are allowed
-        cudaPitchedPtr hp8, 
-        cudaPitchedPtr hp9, */
         float3 * VBOBuffer,
         int isolevel,
         int sum,
@@ -524,30 +527,30 @@ __global__ void traverseHP(
         target = 0;
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
-/*    if (size > 512)
-        cubePosition = scanHPLevel<int1>(target, hp9, cubePosition, log2Size-9);
+    if (size > 512)
+        cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
     
     if (size > 256)
-        cubePosition = scanHPLevel<int1>(target, hp8, cubePosition, log2Size-8);
+        cubePosition = scanHPLevel<int1>(target, levels[8], cubePosition, log2Size-8);
     
     if (size > 128)
-        cubePosition = scanHPLevel<int1>(target, hp7, cubePosition, log2Size-7);
-*/    
+        cubePosition = scanHPLevel<int1>(target, levels[7], cubePosition, log2Size-7);
+
     if (size > 64)
-        cubePosition = scanHPLevel<int1>(target, hp6, cubePosition, log2Size-6);
+        cubePosition = scanHPLevel<int1>(target, levels[6], cubePosition, log2Size-6);
     
-    cubePosition = scanHPLevel<int1>(target, hp5, cubePosition, log2Size-5);
-    cubePosition = scanHPLevel<short1>(target, hp4, cubePosition, log2Size-4);
-    cubePosition = scanHPLevel<short1>(target, hp3, cubePosition, log2Size-3);
-    cubePosition = scanHPLevel<short1>(target, hp2, cubePosition, log2Size-2);
-    cubePosition = scanHPLevel<char1>(target, hp1, cubePosition, log2Size-1);
-    cubePosition = scanHPLevel<uchar4>(target, hp0, cubePosition, log2Size);
+    cubePosition = scanHPLevel<int1>(target, levels[5], cubePosition, log2Size-5);
+    cubePosition = scanHPLevel<short1>(target, levels[4], cubePosition, log2Size-4);
+    cubePosition = scanHPLevel<short1>(target, levels[3], cubePosition, log2Size-3);
+    cubePosition = scanHPLevel<short1>(target, levels[2], cubePosition, log2Size-2);
+    cubePosition = scanHPLevel<char1>(target, levels[1], cubePosition, log2Size-1);
+    cubePosition = scanHPLevel<uchar4>(target, levels[0], cubePosition, log2Size);
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
 
     char vertexNr = 0;
-    const uchar4 cubeData = get_voxel<uchar4>(hp0, cubePosition, log2Size);
+    const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
 
     // seems to compute one triangle
     // max 5 triangles
@@ -558,19 +561,19 @@ __global__ void traverseHP(
 
         // Store vertex in VBO
         const float3 forwardDifference0 = make_float3(
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size).z) 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size).z) 
             );
 
         const float3 forwardDifference1 = make_float3(
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size).z + get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size).z) 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size).z), 
+                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size).z) 
             );
 
-        const int value0 = get_voxel<uchar4>(hp0, make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
-        const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(hp0, make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
+        const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
+        const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
 
