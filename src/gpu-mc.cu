@@ -332,15 +332,55 @@ void histoPyramidTraversal() {
 
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
 
+    for (unsigned int i = 0; i < num_of_levels; i++) {
+        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
+    }
+//    handleCudaError(cudaMemcpyToArray());
+    // TODO to get this working I need to setup OpenGL with VBO
+    //      since OpenGL over SSH is hard, maybe I can just write into an array
+}
+
+#ifdef DEBUG
+bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
+    return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
+}
+
+bool testCudaPitchedPtrOnDevice() {
+    std::pair<cudaExtent, cudaPitchedPtr> pair = images_size_pointer.back();
+    dim3 grid(1,1,1);
+    dim3 block(1,1,1);
+    unsigned int h_count = 0;
+    unsigned int * d_count;
+    cudaMalloc(&d_count, sizeof(unsigned int));
+    sum_values_of_pitched_ptr<<<grid, block>>>(d_count, pair.first.depth, log2(pair.first.depth));
+    cudaMemcpy(&h_count, d_count, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    cudaFree(d_count);
+    bool success = sum_of_triangles == h_count;
+    if (!success)
+        std::cout << "something is wrong with the cudaPitchedPtr copied to the GPU via cudaMemcpyToSymbol" << std::endl;
+    return success;
+}
+
+bool testHistoPyramidTraversal() {
+    bool success = true;
     size_t num_of_levels_readback = 0;
     handleCudaError(cudaMemcpyFromSymbol(&num_of_levels_readback, "num_of_levels", sizeof(size_t), 0, cudaMemcpyDeviceToHost));
 
-    assert(num_of_levels == num_of_levels_readback);
-
-    for (unsigned int i = 0; i < num_of_levels; i++) {
-        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
+    success &= images_size_pointer.size() == num_of_levels_readback;
+    if (!success) {
+        std::cout << "number of levels on GPU are not set correctly: " << num_of_levels_readback << ", should be: " << images_size_pointer.size() << std::endl;
     }
-    // TODO to get this working I need to setup OpenGL with VBO
-    //      resolve the issue with the limited arguments size of the kernel
-    //      since OpenGL over SSH is hard, maybe I can just write into an array
+
+    cudaPitchedPtr cpp = {0};
+    for (unsigned int i = 0; i < num_of_levels_readback; i++) {
+        handleCudaError(cudaMemcpyFromSymbol(&cpp, "levels", sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyDeviceToHost));
+        bool tmp_success = cpp == images_size_pointer.at(i).second;
+        if (!tmp_success) {
+            std::cout << "cudaPitchedPtr into arguments of GPU does not match at level " << i << std::endl;
+        }
+        success &= tmp_success;
+    }
+    success &= testCudaPitchedPtrOnDevice();
+    return success;
 }
+#endif // DEBUG
