@@ -51,24 +51,24 @@ void renderBitmapString(float x, float y, float z, void *font, char *string) {
 
 int frame = 0;
 int timebase = 0;
-//char s[80];
 std::stringstream s;
 int previousTime = 0;
+
 void drawFPSCounter(int sum) {
-        frame++;
+    frame++;
 
     int time = glutGet(GLUT_ELAPSED_TIME);
-        if (time - timebase > 1000) { // 1 times per second
-                s.str("");
-                s << "Marching Cubes - Triangles: " << sum
-                  << " FPS: " << frame*1000.0/(time-timebase)
-                  << " Speed: " << static_cast<int>(time - previousTime) << " ms"
-                  << std::endl;
-                timebase = time;
-                frame = 0;
-        }
+    if (time - timebase > 1000) { // 1 times per second
+        s.str("");
+        s << "Marching Cubes - Triangles: " << sum
+          << " FPS: " << frame*1000.0/(time-timebase)
+          << " Speed: " << static_cast<int>(time - previousTime) << " ms"
+          << std::endl;
+          timebase = time;
+          frame = 0;
+    }
 
-        previousTime = time;
+    previousTime = time;
     glutSetWindowTitle(s.str().c_str());
 }
 
@@ -79,26 +79,26 @@ void idle() {
 void reshape(int width, int height) {
     windowWidth = width;
     windowHeight = height;
-        glMatrixMode(GL_PROJECTION);
+    glMatrixMode(GL_PROJECTION);
     glViewport(0, 0, width, height);
-        gluPerspective(45.0f, (GLfloat)width/(GLfloat)height, 0.5f, 10000.0f);
+    gluPerspective(45.0f, (GLfloat)width/(GLfloat)height, 0.5f, 10000.0f);
 }
 
 void renderScene() {
 //    histoPyramidConstruction();
 
     // Read top of histoPyramid an use this size to allocate VBO below
-//        int sum[8] = {0,0,0,0,0,0,0,0};
+//      int sum[8] = {0,0,0,0,0,0,0,0};
 //    queue.enqueueReadImage(images[images.size()-1], CL_FALSE, origin, region, 0, 0, sum);
 
-//        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-//        queue.finish();
-//        int totalSum = sum[0] + sum[1] + sum[2] + sum[3] + sum[4] + sum[5] + sum[6] + sum[7] ;
+//      glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+//      queue.finish();
+//      int totalSum = sum[0] + sum[1] + sum[2] + sum[3] + sum[4] + sum[5] + sum[6] + sum[7] ;
 
-//        if(totalSum == 0) {
-//                std::cout << "HistoPyramid result is 0" << std::endl;
-//        return;
-//        }
+//      if (totalSum == 0) {
+//          std::cout << "HistoPyramid result is 0" << std::endl;
+//          return;
+//      }
 
         // 128 MB
         //if(totalSum >= 1864135) // Need to split into several VBO's to support larger structures
@@ -112,36 +112,18 @@ void renderScene() {
 //        glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     // Traverse the histoPyramid and fill VBO
-//    histoPyramidTraversal(totalSum);
+//        histoPyramidTraversal(totalSum);
 
     // Render VBO
     glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
-        //glRotatef(270.0f, 1.0f, 0.0f, 0.0f);  
-//        drawFPSCounter(totalSum);
+    glLoadIdentity();
+    //glRotatef(270.0f, 1.0f, 0.0f, 0.0f);  
+//    drawFPSCounter(totalSum);
 
-        glTranslatef(-camX, -camY, -camZ);
+    glTranslatef(-camX, -camY, -camZ);
 
-        glRotatef(xrot,1.0,0.0,0.0);
-        glRotatef(yrot,0.0, 1.0, 0.0);
-
-    // Draw axis
-    /*
-    glPushMatrix();
-    glBegin(GL_LINES);
-        glColor3f(1.0f, 0.0f, 0.0f);
-
-        glVertex3f(0.0f, 0.0f, 0.0f);
-        glVertex3f(0.0f, 2.0f, 0.0f);
-
-        glVertex3f(0.0f, 0.0f, 0.0f);
-        glVertex3f(2.0f, 0.0f, 0.0f);
-
-        glVertex3f(0.0f, 0.0f, 0.0f);
-        glVertex3f(0.0f, 0.0f, 2.0f);
-    glEnd();
-    glPopMatrix();
-    */
+    glRotatef(xrot,1.0,0.0,0.0);
+    glRotatef(yrot,0.0, 1.0, 0.0);
 
     glutSolidSphere(1.0, 10, 10);
 
@@ -159,8 +141,8 @@ void renderScene() {
 //    glVertexPointer(3, GL_FLOAT, 24, BUFFER_OFFSET(0));
 //    glNormalPointer(GL_FLOAT, 24, BUFFER_OFFSET(12));
 
-//        queue.finish();
-        //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
+//      queue.finish();
+      //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
 //    glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
 
     // Release buffer
@@ -173,7 +155,6 @@ void renderScene() {
 //    glDeleteBuffers(1, &VBO_ID);
 
     angle += 0.1f;
-
 }
 
 void run() {
@@ -181,13 +162,13 @@ void run() {
 }
 
 void keyboard(unsigned char key, int x, int y) {
-        switch(key) {
-                case '+':
-//                        isolevel ++;
-                break;
-                case '-':
-//                        isolevel --;
-                break;
+    switch(key) {
+        case '+':
+//            isolevel ++;
+            break;
+        case '-':
+//            isolevel --;
+            break;
         //WASD movement
         case 'w':
             camZ -= 0.1f;
@@ -219,19 +200,19 @@ void setupOpenGL(int * argc, char ** argv, int size, int sizeX, int sizeY, int s
     glutDisplayFunc(renderScene);
     glutIdleFunc(idle);
     glutReshapeFunc(reshape);
-        glutKeyboardFunc(keyboard);
-        glutMotionFunc(mouseMovement);
+    glutKeyboardFunc(keyboard);
+    glutMotionFunc(mouseMovement);
 
     glewInit();
-        glEnable(GL_NORMALIZE);
-        glEnable(GL_DEPTH_TEST);
-        glShadeModel(GL_SMOOTH);
-        glEnable(GL_LIGHT0);
-        glEnable(GL_LIGHTING);
+    glEnable(GL_NORMALIZE);
+    glEnable(GL_DEPTH_TEST);
+    glShadeModel(GL_SMOOTH);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_LIGHTING);
 
-        // Set material properties which will be assigned by glColor
-        GLfloat color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, color);
+    // Set material properties which will be assigned by glColor
+    GLfloat color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, color);
     GLfloat specReflection[] = { 0.8f, 0.8f, 0.8f, 1.0f };
     glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, specReflection);
     GLfloat shininess[] = { 16.0f };
@@ -265,5 +246,4 @@ void setupOpenGL(int * argc, char ** argv, int size, int sizeX, int sizeY, int s
     translation.y = -(float)sizeY/2.0f;
     translation.z = -(float)sizeZ/2.0f;
 }
-
 
