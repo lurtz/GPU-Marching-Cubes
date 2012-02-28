@@ -42,9 +42,8 @@ void mouseMovement(int x, int y) {
 }
 
 void renderBitmapString(float x, float y, float z, void *font, char *string) {
-    char *c;
     glRasterPos3f(x, y,z);
-    for(c = string; *c != '\0'; c++) {
+    for(char * c = string; *c != '\0'; c++) {
         glutBitmapCharacter(font, *c);
     }
 }
@@ -64,8 +63,8 @@ void drawFPSCounter(int sum) {
           << " FPS: " << frame*1000.0/(time-timebase)
           << " Speed: " << static_cast<int>(time - previousTime) << " ms"
           << std::endl;
-          timebase = time;
-          frame = 0;
+        timebase = time;
+        frame = 0;
     }
 
     previousTime = time;
@@ -85,6 +84,7 @@ void reshape(int width, int height) {
 }
 
 void renderScene() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 //    histoPyramidConstruction();
 
     // Read top of histoPyramid an use this size to allocate VBO below
@@ -125,8 +125,6 @@ void renderScene() {
     glRotatef(xrot,1.0,0.0,0.0);
     glRotatef(yrot,0.0, 1.0, 0.0);
 
-    glutSolidSphere(1.0, 10, 10);
-
     glPushMatrix();
     glColor3f(1.0f, 1.0f, 1.0f);
     glScalef(scalingFactor.x, scalingFactor.y, scalingFactor.z);
@@ -144,6 +142,8 @@ void renderScene() {
 //      queue.finish();
       //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
 //    glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
+
+    glutSolidSphere(70.0, 100, 100);
 
     // Release buffer
     glBindBuffer(GL_ARRAY_BUFFER, 0);
