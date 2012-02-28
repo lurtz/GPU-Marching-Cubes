@@ -16,7 +16,6 @@ typedef struct {
 
 // Define some globals
 GLuint VBO_ID = 0;
-GLfloat angle = 0.0f;
 int windowWidth, windowHeight;
 
 Sizef scalingFactor;
@@ -153,8 +152,6 @@ void renderScene() {
     glPopMatrix();
     glutSwapBuffers();
 //    glDeleteBuffers(1, &VBO_ID);
-
-    angle += 0.1f;
 }
 
 void run() {
@@ -245,5 +242,10 @@ void setupOpenGL(int * argc, char ** argv, int size, int sizeX, int sizeY, int s
     translation.x = (float)sizeX/2.0f;
     translation.y = -(float)sizeY/2.0f;
     translation.z = -(float)sizeZ/2.0f;
+
+    glGenBuffers(1, &VBO_ID);
 }
 
+GLuint getVBO() {
+    return VBO_ID;
+}

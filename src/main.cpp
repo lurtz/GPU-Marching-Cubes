@@ -32,7 +32,7 @@ int main(int argc, char * argv[]) {
 
   int size = prepareDataset(&voxel_data_ptr, dim[0]/stepSizeX, dim[1]/stepSizeY, dim[2]/stepSizeZ);
   setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
-  setupCuda(voxel_data_ptr, size);
+  setupCuda(voxel_data_ptr, size, getVBO());
   updateScalarField();
   bool success = testUpdateScalarField(voxel_data_ptr);
 

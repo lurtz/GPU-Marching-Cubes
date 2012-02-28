@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <cassert>
+#include <cuda_gl_interop.h>
 
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
@@ -12,10 +13,19 @@ const unsigned int LOG2CUBESIZEHP = 1;
 unsigned int SIZE;
 unsigned int rawMemSize;
 unsigned char * rawDataPtr;
+struct cudaGraphicsResource * vbo_cuda = NULL;
+GLuint vbo_gl;
+size_t vbo_size = 0;
 
 #ifdef DEBUG
 unsigned int sum_of_triangles = 0;
 #endif
+
+// TODO How to use the VBO:
+//      1. calc number of triangles
+//      2. resize VBO to the correct size (triangles and normals)
+//      3. calc the triangles
+//      4. render
 
 // first level has char4 as datatype, which contains: (number of triangles, cube index, value of first cube element, 0)
 // first to second level contain volumes with unsigned char as elements
@@ -53,6 +63,26 @@ bool handleCudaError(const cudaError_t& status) {
             error_msg = "cudaErrorInvalidMemcpyDirection";
             break;
         }
+        case cudaErrorInvalidDevice: {
+            error_msg = "cudaErrorInvalidDevice";
+            break;
+        }
+        case cudaErrorSetOnActiveProcess: {
+            error_msg = "cudaErrorSetOnActiveProcess";
+            break;
+        }
+        case cudaErrorInvalidResourceHandle: {
+            error_msg = "cudaErrorInvalidResourceHandle";
+            break;
+        }
+        case cudaErrorMemoryAllocation: {
+            error_msg = cudaErrorMemoryAllocation;
+            break;
+        }
+        case cudaErrorUnknown: {
+            error_msg = "cudaErrorUnknown";
+            break;
+        }
         default: {
             error_msg = "unknown error";
             break;
@@ -65,7 +95,14 @@ bool handleCudaError(const cudaError_t& status) {
     return status != cudaSuccess;
 }
 
-void setupCuda(unsigned char * voxels, unsigned int size) {
+void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
+    if (vbo == 0 && false) {
+        std::cout << "Vertex Buffer Object to write into is invalid, I will exit" << std::endl;
+        exit(1);
+    }
+    vbo_gl = vbo;
+    handleCudaError(cudaGLSetGLDevice(0));
+
     SIZE = size;
 
     // Create images for the HistogramPyramid
@@ -316,6 +353,21 @@ bool testHistoPyramidConstruction() {
 }
 #endif // DEBUG
 
+void resizeVBO(size_t _vbo_size) {
+    if (vbo_cuda != NULL) {
+        handleCudaError(cudaGraphicsUnregisterResource(vbo_cuda));
+        vbo_cuda = NULL;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_gl);
+    glBufferData(GL_ARRAY_BUFFER, _vbo_size, 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    handleCudaError(cudaGraphicsGLRegisterBuffer(&vbo_cuda, vbo_gl, cudaGraphicsMapFlagsWriteDiscard));
+    
+    vbo_size = _vbo_size;
+}
+
 void histoPyramidTraversal() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
@@ -335,9 +387,34 @@ void histoPyramidTraversal() {
     for (unsigned int i = 0; i < num_of_levels; i++) {
         handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
     }
-//    handleCudaError(cudaMemcpyToArray());
     // TODO to get this working I need to setup OpenGL with VBO
     //      since OpenGL over SSH is hard, maybe I can just write into an array
+    // resize buffer
+    // normals, triangles, three coordinates, three points in float
+    size_t buffer_size = sum*2*3*3*sizeof(float);
+    // just increasing the buffer would be enough as well, but atm this is easier
+    if (buffer_size != vbo_size)
+        resizeVBO(buffer_size);
+
+    float3 * triangle_data = NULL;
+    cudaGraphicsMapResources(1, &vbo_cuda, 0);
+    size_t num_bytes = 0;
+    cudaGraphicsResourceGetMappedPointer((void**)&triangle_data, &num_bytes, vbo_cuda);
+    assert(num_bytes >= buffer_size);
+
+    dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
+    dim3 grid((pair.first.depth / CUBESIZE) * (pair.first.depth / CUBESIZE), pair.first.depth / CUBESIZE, 1);
+    int log2GridSize = log2(pair.first.depth / CUBESIZE);
+    
+    traverseHP<<<grid, block>>>(
+        triangle_data,
+        isolevel,
+        sum,
+        log2GridSize, pair.first.depth/CUBESIZE-1, LOG2CUBESIZE, 
+        pair.first.depth
+        );
+    
+    cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
 }
 
 #ifdef DEBUG

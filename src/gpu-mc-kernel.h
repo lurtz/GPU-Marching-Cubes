@@ -524,7 +524,8 @@ __global__ void traverseHP(
     unsigned int target = getId(pos, log2BlockWidth, log2CubeWidth);
     int log2Size = log2BlockWidth + log2CubeWidth;
     if(target >= sum)
-        target = 0;
+        //target = 0;
+        return;
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
     if (size > 512)
