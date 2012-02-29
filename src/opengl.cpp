@@ -199,11 +199,11 @@ void keyboard(unsigned char key, int x, int y) {
 void setupOpenGL(int * argc, char ** argv, int size, int sizeX, int sizeY, int sizeZ, float spacingX, float spacingY, float spacingZ) {
 /* Initialize GLUT */
     glutInit(argc, argv);
-    glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE);
-    glutInitWindowPosition(0, 0);
-    glutInitWindowSize(glutGet(GLUT_SCREEN_WIDTH),glutGet(GLUT_SCREEN_HEIGHT));
+    glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGB);
+    glutInitWindowPosition(100, 100);
+    glutInitWindowSize(800,600);
     glutCreateWindow("GPU Marching Cubes");
-    glutFullScreen();
+//    glutFullScreen();
     glutDisplayFunc(renderScene);
     glutIdleFunc(idle);
     glutReshapeFunc(reshape);
