@@ -475,7 +475,7 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
     };
 
     int acc = current.w + neighbors[0];
-    int cmp[8];
+    bool cmp[8];
     cmp[0] = acc <= target;
     acc += neighbors[1];
     cmp[1] = acc <= target;
@@ -541,6 +541,7 @@ __global__ void traverseHP(
     cubePosition = scanHPLevel<short1>(target, levels[2], cubePosition, log2Size-2);
     cubePosition = scanHPLevel<char1>(target, levels[1], cubePosition, log2Size-1);
     cubePosition = scanHPLevel<uchar4>(target, levels[0], cubePosition, log2Size);
+    // revert last multiplikation in scanHPLevel
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
@@ -575,6 +576,7 @@ __global__ void traverseHP(
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
 
+        // TODO verify vertexNr, check if all triangles are hardcoded
         VBOBuffer[target*6 + vertexNr*2] = vertex;
         VBOBuffer[target*6 + vertexNr*2 + 1] = normal;
 
