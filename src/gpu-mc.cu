@@ -17,9 +17,7 @@ struct cudaGraphicsResource * vbo_cuda = NULL;
 GLuint vbo_gl;
 size_t vbo_size = 0;
 
-#ifdef DEBUG
 unsigned int sum_of_triangles = 0;
-#endif
 
 // TODO How to use the VBO:
 //      1. calc number of triangles
@@ -381,6 +379,8 @@ int histoPyramidTraversal() {
         sum = sum_3d_array<ushort1>(pair);
     else
         sum = sum_3d_array<uint1>(pair);
+    sum_of_triangles = sum;
+    std::cout << "you will get " << sum << " triangles" << std::endl;
 
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
 
@@ -393,7 +393,7 @@ int histoPyramidTraversal() {
     // normals, triangles, three coordinates, three points in float
     size_t buffer_size = sum*2*3*3*sizeof(float);
     // just increasing the buffer would be enough as well, but atm this is easier
-    if (buffer_size != vbo_size)
+    if (buffer_size > vbo_size)
         resizeVBO(buffer_size);
 
     float3 * triangle_data = NULL;
@@ -463,9 +463,11 @@ bool testHistoPyramidTraversal() {
 }
 
 int marching_cube(int _isolevel) {
-    if (isolevel != _isolevel)
-        _isolevel = isolevel; 
-    histoPyramidConstruction();
-    return histoPyramidTraversal();
+    if (isolevel != _isolevel) {
+        isolevel = _isolevel; 
+        histoPyramidConstruction();
+        histoPyramidTraversal();
+    }
+    return sum_of_triangles;
 }
 #endif // DEBUG

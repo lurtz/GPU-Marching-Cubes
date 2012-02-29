@@ -148,7 +148,7 @@ void renderScene() {
       //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
     glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
 
-    glutSolidSphere(70.0, 100, 100);
+    glutSolidCube(140);
 
     // Release buffer
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -167,12 +167,18 @@ void run() {
 void keyboard(unsigned char key, int x, int y) {
     switch(key) {
         case '+':
-            if (_isolevel < std::numeric_limits<char>::max()-1)
+            if (_isolevel < std::numeric_limits<unsigned char>::max()) {
+                std::cout << "Isolevel increased" << std::endl;
+                std::cout << "isolevel = " << _isolevel << " / " << static_cast<unsigned int>(std::numeric_limits<unsigned char>::max()) << std::endl;
                 _isolevel++;
+            }
             break;
         case '-':
-            if (_isolevel > 0)
+            if (_isolevel > 0) {
+                std::cout << "Isolevel decreased" << std::endl;
+                std::cout << "isolevel = " << _isolevel << " / " << static_cast<unsigned int>(std::numeric_limits<unsigned char>::max()) << std::endl;
                 _isolevel--;
+            }
             break;
         //WASD movement
         case 'w':
@@ -201,7 +207,7 @@ void setupOpenGL(int * argc, char ** argv, int size, int sizeX, int sizeY, int s
     glutInit(argc, argv);
     glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowPosition(100, 100);
-    glutInitWindowSize(800,600);
+    glutInitWindowSize(windowWidth = 800, windowHeight = 600);
     glutCreateWindow("GPU Marching Cubes");
 //    glutFullScreen();
     glutDisplayFunc(renderScene);
