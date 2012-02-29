@@ -1,4 +1,5 @@
 #include <GL/glew.h>
+#include <GL/freeglut.h>
 #include <GL/glut.h>
 #include <cmath>
 #include <iostream>
@@ -195,7 +196,7 @@ void keyboard(unsigned char key, int x, int y) {
         break;
         case 27:
             //TODO some clean up
-            exit(0);
+            glutLeaveMainLoop();
         break;
         default:
             std::cout << static_cast<char>(key) << std::endl;
