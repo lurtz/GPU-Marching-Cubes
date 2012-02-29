@@ -463,52 +463,47 @@ __global__ void sum_values_of_pitched_ptr(unsigned int * d_sum, int size, int lo
 
 template<typename T>
 __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 current, int log2Size) {
-    int4 neighbors0;
-    int4 neighbors1;
-    neighbors0 = make_int4(
+    int neighbors[8] = {
             get_voxel<T>(hp, current + cubeOffsets[0], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[1], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[2], log2Size).x,
-            get_voxel<T>(hp, current + cubeOffsets[3], log2Size).x
-    );
-    neighbors1 = make_int4(
+            get_voxel<T>(hp, current + cubeOffsets[3], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[4], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[5], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[6], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[7], log2Size).x
-    );
+    };
 
-    int4 cmp0;
-    int4 cmp1;
-    int acc = current.w + neighbors0.x;
-    cmp0.x = acc <= target;
-    acc += neighbors0.y;
-    cmp0.y = acc <= target;
-    acc += neighbors0.z;
-    cmp0.z = acc <= target;
-    acc += neighbors0.w;
-    cmp0.w = acc <= target;
-    acc += neighbors1.x;
-    cmp1.x = acc <= target;
-    acc += neighbors1.y;
-    cmp1.y = acc <= target;
-    acc += neighbors1.z;
-    cmp1.z = acc <= target;
-    cmp1.w = 0;
+    int acc = current.w + neighbors[0];
+    int cmp[8];
+    cmp[0] = acc <= target;
+    acc += neighbors[1];
+    cmp[1] = acc <= target;
+    acc += neighbors[2];
+    cmp[2] = acc <= target;
+    acc += neighbors[3];
+    cmp[3] = acc <= target;
+    acc += neighbors[4];
+    cmp[4] = acc <= target;
+    acc += neighbors[5];
+    cmp[5] = acc <= target;
+    acc += neighbors[6];
+    cmp[6] = acc <= target;
+    cmp[7] = 0;
 
-    current += cubeOffsets[(cmp0.x+cmp0.y+cmp0.z+cmp0.w+cmp1.x+cmp1.y+cmp1.z+cmp1.w)];
+    current += cubeOffsets[(cmp[0]+cmp[1]+cmp[2]+cmp[3]+cmp[4]+cmp[5]+cmp[6]+cmp[7])];
     current.x = current.x*2;
     current.y = current.y*2;
     current.z = current.z*2;
     current.w = current.w +
-        cmp0.x*neighbors0.x + 
-        cmp0.y*neighbors0.y + 
-        cmp0.z*neighbors0.z + 
-        cmp0.w*neighbors0.w + 
-        cmp1.x*neighbors1.x + 
-        cmp1.y*neighbors1.y + 
-        cmp1.z*neighbors1.z + 
-        cmp1.w*neighbors1.w;
+        cmp[0]*neighbors[0] + 
+        cmp[1]*neighbors[1] + 
+        cmp[2]*neighbors[2] + 
+        cmp[3]*neighbors[3] + 
+        cmp[4]*neighbors[4] + 
+        cmp[5]*neighbors[5] + 
+        cmp[6]*neighbors[6] + 
+        cmp[7]*neighbors[7];
     return current;
 }
 
