@@ -18,7 +18,9 @@ void updateScalarField();
 void histoPyramidConstruction();
 
 // creates the VBO
-void histoPyramidTraversal();
+int histoPyramidTraversal();
+
+int marching_cube(int _isolevel);
 
 #ifdef DEBUG
 bool testUpdateScalarField(unsigned char * voxels);

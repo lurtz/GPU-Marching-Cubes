@@ -368,7 +368,7 @@ void resizeVBO(size_t _vbo_size) {
     vbo_size = _vbo_size;
 }
 
-void histoPyramidTraversal() {
+int histoPyramidTraversal() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
     size_t num_of_levels = images_size_pointer.size();
@@ -415,6 +415,7 @@ void histoPyramidTraversal() {
         );
     
     cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
+    return sum;
 }
 
 #ifdef DEBUG
@@ -459,5 +460,12 @@ bool testHistoPyramidTraversal() {
     }
     success &= testCudaPitchedPtrOnDevice();
     return success;
+}
+
+int marching_cube(int _isolevel) {
+    if (isolevel != _isolevel)
+        _isolevel = isolevel; 
+    histoPyramidConstruction();
+    return histoPyramidTraversal();
 }
 #endif // DEBUG

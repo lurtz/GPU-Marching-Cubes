@@ -4,7 +4,9 @@
 #include <iostream>
 #include <sstream>
 #include <cstdlib>
+#include <limits>
 #include "opengl.h"
+#include "gpu-mc.h"
 
 typedef struct {
     int x,y,z;
@@ -13,6 +15,8 @@ typedef struct {
 typedef struct {
     float x,y,z;
 } Sizef;
+
+#define BUFFER_OFFSET(i) ((char *)NULL + (i))
 
 // Define some globals
 GLuint VBO_ID = 0;
@@ -24,6 +28,8 @@ Sizef translation;
 float camX, camY, camZ = 4.0f; //X, Y, and Z
 float lastx, lasty, xrot, yrot, xrotrad, yrotrad; //Last pos and rotation
 float speed = 0.1f; //Movement speed
+
+int _isolevel = 50;
 
 void mouseMovement(int x, int y) {
     int cx = windowWidth/2;
@@ -92,7 +98,7 @@ void renderScene() {
 
 //      glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 //      queue.finish();
-//      int totalSum = sum[0] + sum[1] + sum[2] + sum[3] + sum[4] + sum[5] + sum[6] + sum[7] ;
+      int totalSum = marching_cube(_isolevel);
 
 //      if (totalSum == 0) {
 //          std::cout << "HistoPyramid result is 0" << std::endl;
@@ -101,7 +107,7 @@ void renderScene() {
 
         // 128 MB
         //if(totalSum >= 1864135) // Need to split into several VBO's to support larger structures
-        //      isolevel_up = true;
+        //      _isolevel_up = true;
 
         // Create new VBO
 //        glGenBuffers(1, &VBO_ID);
@@ -131,16 +137,16 @@ void renderScene() {
 
     glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
     // Normal Buffer
-//    glBindBuffer(GL_ARRAY_BUFFER, VBO_ID);
-//    glEnableClientState(GL_VERTEX_ARRAY);
-//    glEnableClientState(GL_NORMAL_ARRAY);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_ID);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
 
-//    glVertexPointer(3, GL_FLOAT, 24, BUFFER_OFFSET(0));
-//    glNormalPointer(GL_FLOAT, 24, BUFFER_OFFSET(12));
+    glVertexPointer(3, GL_FLOAT, 24, BUFFER_OFFSET(0));
+    glNormalPointer(GL_FLOAT, 24, BUFFER_OFFSET(12));
 
 //      queue.finish();
       //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
-//    glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
+    glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
 
     glutSolidSphere(70.0, 100, 100);
 
@@ -161,10 +167,12 @@ void run() {
 void keyboard(unsigned char key, int x, int y) {
     switch(key) {
         case '+':
-//            isolevel ++;
+            if (_isolevel < std::numeric_limits<char>::max()-1)
+                _isolevel++;
             break;
         case '-':
-//            isolevel --;
+            if (_isolevel > 0)
+                _isolevel--;
             break;
         //WASD movement
         case 'w':
@@ -183,6 +191,8 @@ void keyboard(unsigned char key, int x, int y) {
             //TODO some clean up
             exit(0);
         break;
+        default:
+            std::cout << static_cast<char>(key) << std::endl;
         }
 }
 
