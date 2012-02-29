@@ -10,22 +10,10 @@
 // voxels needs to be cubic with sidelength of a power of 2
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo);
 
-// classifies each voxel and calculates the number of triangles needed for this
-// voxel
-void updateScalarField();
-
-// calculates the total number of triangles needed
-void histoPyramidConstruction();
-
-// creates the VBO
-int histoPyramidTraversal();
-
 int marching_cube(int _isolevel);
 
 #ifdef DEBUG
-bool testUpdateScalarField(unsigned char * voxels);
-bool testHistoPyramidConstruction();
-bool testHistoPyramidTraversal();
+bool runTests(unsigned char * voxels);
 #endif // DEBUG
 
 #endif // gpu_mc_h__

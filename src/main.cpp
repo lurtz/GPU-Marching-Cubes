@@ -33,21 +33,16 @@ int main(int argc, char * argv[]) {
   int size = prepareDataset(&voxel_data_ptr, dim[0]/stepSizeX, dim[1]/stepSizeY, dim[2]/stepSizeZ);
   setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
   setupCuda(voxel_data_ptr, size, getVBO());
-  updateScalarField();
-  bool success = testUpdateScalarField(voxel_data_ptr);
 
-  histoPyramidConstruction();
-  success &= testHistoPyramidConstruction();
+  #ifdef DEBUG
+  if (!runTests(voxel_data_ptr))
+    std::cout << "something with the tests went wrong" << std::endl;
+  std::cout << "no segfault here" << std::endl;
+  #endif // DEBUG
 
-  histoPyramidTraversal();
-  success &= testHistoPyramidTraversal();
+  delete [] voxel_data_ptr; 
 
   run();
 
-  std::cout << "no segfault here" << std::endl;
-  if (!success)
-    std::cout << "something with the tests went wrong" << std::endl;
-
-  delete [] voxel_data_ptr; 
   return 0;
 }

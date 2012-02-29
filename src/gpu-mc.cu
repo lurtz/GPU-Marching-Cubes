@@ -154,6 +154,8 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
 //    delete[] voxels;
 }
 
+// classifies each voxel and calculates the number of triangles needed for this
+// voxel
 void updateScalarField() {
     cudaExtent _size = images_size_pointer.at(0).first;
     dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
@@ -214,6 +216,7 @@ T* get_data_from_pitched_ptr(unsigned int level) {
 }
 
 bool testUpdateScalarField(unsigned char * voxels) {
+    updateScalarField();
     // get level0 data from gpu
     uchar4 * lvl0_data = get_data_from_pitched_ptr<uchar4>(0);
 
@@ -264,10 +267,8 @@ bool testUpdateScalarField(unsigned char * voxels) {
 // end of code to test classifycubes
 #endif // DEBUG
 
+// calculates the total number of triangles needed
 void histoPyramidConstruction() {
-    // first level
-    updateScalarField();
-
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
     // i=    0       1        2        3        4      5
@@ -336,6 +337,7 @@ bool templatedTestHistoPyramidConstruction(unsigned int level) {
 }
 
 bool testHistoPyramidConstruction() {
+    histoPyramidConstruction();
     bool success = true;
     for (unsigned int i = 0; i < log2(SIZE); i++) {
         if (i == 0)
@@ -366,6 +368,7 @@ void resizeVBO(size_t _vbo_size) {
     vbo_size = _vbo_size;
 }
 
+// creates the VBO
 int histoPyramidTraversal() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
@@ -440,6 +443,7 @@ bool testCudaPitchedPtrOnDevice() {
 }
 
 bool testHistoPyramidTraversal() {
+    histoPyramidTraversal();
     bool success = true;
     size_t num_of_levels_readback = 0;
     handleCudaError(cudaMemcpyFromSymbol(&num_of_levels_readback, "num_of_levels", sizeof(size_t), 0, cudaMemcpyDeviceToHost));
@@ -462,12 +466,23 @@ bool testHistoPyramidTraversal() {
     return success;
 }
 
+
+bool runTests(unsigned char * voxels) {
+  bool success = testUpdateScalarField(voxels);
+  success &= testHistoPyramidConstruction();
+  success &= testHistoPyramidTraversal();
+  return success;
+}
+#endif // DEBUG
+
 int marching_cube(int _isolevel) {
     if (isolevel != _isolevel) {
         isolevel = _isolevel; 
+        // first level
+        updateScalarField();
+        // all other levels
         histoPyramidConstruction();
         histoPyramidTraversal();
     }
     return sum_of_triangles;
 }
-#endif // DEBUG
