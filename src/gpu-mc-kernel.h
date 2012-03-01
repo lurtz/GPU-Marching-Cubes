@@ -507,6 +507,32 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
     return current;
 }
 
+__global__ void fillVBO(float3 * VBOBuffer) {
+    unsigned int target = threadIdx.x;
+
+    for (char vertexNr = 0; vertexNr < 3; vertexNr++) {
+        // TODO verify vertexNr, check if all triangles are hardcoded
+        float3 vertex;
+        float3 normal;
+        if (vertexNr == 0) {
+            vertex = make_float3(0.0f, 200.0f, 000.0f);
+        }
+        if (vertexNr == 1) {
+            vertex = make_float3(100.0f, 200.0f, 000.0f);
+        }
+        if (vertexNr == 2) {
+            vertex = make_float3(100.0f, 300.0f, 000.0f);
+        }
+        normal = make_float3(0.0f, 0.0f, 1.0f);        
+        // content of VBO seems to be of no effect
+//        vertex = make_float3(0.0f, 0.0f, 0.0f);
+
+        VBOBuffer[target*6 + vertexNr] = vertex;
+        VBOBuffer[target*6 + vertexNr + 3] = normal;
+    }
+
+}
+
 __global__ void traverseHP(
         float3 * VBOBuffer,
         int isolevel,
@@ -577,8 +603,8 @@ __global__ void traverseHP(
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
 
         // TODO verify vertexNr, check if all triangles are hardcoded
-        VBOBuffer[target*6 + vertexNr*2] = vertex;
-        VBOBuffer[target*6 + vertexNr*2 + 1] = normal;
+        VBOBuffer[target*6 + vertexNr] = vertex;
+        VBOBuffer[target*6 + vertexNr + 3] = normal;
 
         ++vertexNr;
     }

@@ -149,7 +149,7 @@ void renderScene() {
       //glWaitSync(traversalSync, 0, GL_TIMEOUT_IGNORED);
     glDrawArrays(GL_TRIANGLES, 0, totalSum*3);
 
-    glutSolidCube(140);
+//    glutSolidCube(140);
 
     // Release buffer
     glBindBuffer(GL_ARRAY_BUFFER, 0);

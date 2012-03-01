@@ -19,7 +19,7 @@ size_t vbo_size = 0;
 
 unsigned int sum_of_triangles = 0;
 
-// TODO How to use the VBO:
+// How to use the VBO:
 //      1. calc number of triangles
 //      2. resize VBO to the correct size (triangles and normals)
 //      3. calc the triangles
@@ -353,23 +353,53 @@ bool testHistoPyramidConstruction() {
 }
 #endif // DEBUG
 
-void resizeVBO(size_t _vbo_size) {
+void resizeVBO(size_t _vbo_size, bool clear) {
     if (vbo_cuda != NULL) {
         handleCudaError(cudaGraphicsUnregisterResource(vbo_cuda));
         vbo_cuda = NULL;
     }
 
+    float3 * data = NULL;
+    if (clear) {
+        data = new float3[_vbo_size/sizeof(float3)];
+        for (unsigned int i = 0; i < _vbo_size/sizeof(float3); i++) {
+            float3 val = {0};
+/*
+            if (i % 6 == 0)
+                val = make_float3(0.0f, 200.0f, 0.0f);
+            if (i % 6 == 1)
+                val = make_float3(100.0f, 200.0f, 0.0f);
+            if (i % 6 == 2)
+                val = make_float3(100.0f, 300.0f, 0.0f);
+            if (i % 6 > 2)
+                val = make_float3(0.0f, 0.0f, 1.0f);
+*/
+            data[i] = val;
+        }
+    }
+
     glBindBuffer(GL_ARRAY_BUFFER, vbo_gl);
-    glBufferData(GL_ARRAY_BUFFER, _vbo_size, 0, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, _vbo_size, data, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     handleCudaError(cudaGraphicsGLRegisterBuffer(&vbo_cuda, vbo_gl, cudaGraphicsMapFlagsWriteDiscard));
+
+    delete [] data;
     
     vbo_size = _vbo_size;
 }
 
-// creates the VBO
-int histoPyramidTraversal() {
+size_t resizeVBOIfNeeded(bool clear = false) {
+    // resize buffer
+    // normals, triangles, three coordinates, three points in float
+    size_t buffer_size = sum_of_triangles*2*3*3*sizeof(float);
+    // just increasing the buffer would be enough as well, but atm this is easier
+    if (buffer_size > vbo_size)
+        resizeVBO(buffer_size, clear);
+    return buffer_size;
+}
+
+unsigned int getNumberOfTriangles() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
     size_t num_of_levels = images_size_pointer.size();
@@ -386,18 +416,11 @@ int histoPyramidTraversal() {
     std::cout << "you will get " << sum << " triangles" << std::endl;
 
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
+    return sum;
+}
 
-    for (unsigned int i = 0; i < num_of_levels; i++) {
-        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
-    }
-    // TODO to get this working I need to setup OpenGL with VBO
-    //      since OpenGL over SSH is hard, maybe I can just write into an array
-    // resize buffer
-    // normals, triangles, three coordinates, three points in float
-    size_t buffer_size = sum*2*3*3*sizeof(float);
-    // just increasing the buffer would be enough as well, but atm this is easier
-    if (buffer_size > vbo_size)
-        resizeVBO(buffer_size);
+float3 * getTriangleDataPointer() {
+    size_t buffer_size = resizeVBOIfNeeded(true);
 
     float3 * triangle_data = NULL;
     cudaGraphicsMapResources(1, &vbo_cuda, 0);
@@ -405,6 +428,22 @@ int histoPyramidTraversal() {
     cudaGraphicsResourceGetMappedPointer((void**)&triangle_data, &num_bytes, vbo_cuda);
     assert(num_bytes >= buffer_size);
 
+    return triangle_data;
+}
+
+// creates the VBO
+int histoPyramidTraversal() {
+    getNumberOfTriangles();
+
+    for (unsigned int i = 0; i < images_size_pointer.size(); i++) {
+        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
+    }
+
+    float3 * triangle_data = getTriangleDataPointer();
+    assert(triangle_data != NULL);
+
+    // extremely broken, we dont have a cubic data layout anymore
+    std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
     dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
     dim3 grid((pair.first.depth / CUBESIZE) * (pair.first.depth / CUBESIZE), pair.first.depth / CUBESIZE, 1);
     int log2GridSize = log2(pair.first.depth / CUBESIZE);
@@ -412,16 +451,33 @@ int histoPyramidTraversal() {
     traverseHP<<<grid, block>>>(
         triangle_data,
         isolevel,
-        sum,
+        sum_of_triangles,
         log2GridSize, pair.first.depth/CUBESIZE-1, LOG2CUBESIZE, 
         pair.first.depth
         );
     
     cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
-    return sum;
+    return sum_of_triangles;
 }
 
 #ifdef DEBUG
+int fakeHistoPyramidTraversal() {
+    getNumberOfTriangles();
+    float3 * triangle_data = getTriangleDataPointer();
+
+    // fail! number of triangles, not number of cubes!
+    dim3 block(1, 1, 1);
+    dim3 grid(sum_of_triangles, 1, 1);
+    
+    fillVBO<<<grid, block>>>(
+        triangle_data
+        );
+    
+    cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
+    return sum_of_triangles;
+
+}
+
 bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
     return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
 }
@@ -458,7 +514,7 @@ bool testHistoPyramidTraversal() {
         handleCudaError(cudaMemcpyFromSymbol(&cpp, "levels", sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyDeviceToHost));
         bool tmp_success = cpp == images_size_pointer.at(i).second;
         if (!tmp_success) {
-            std::cout << "cudaPitchedPtr into arguments of GPU does not match at level " << i << std::endl;
+            std::cout << "cudaPitchedPtr used as a argument for a kernel on the GPU does not match at level " << i << std::endl;
         }
         success &= tmp_success;
     }
@@ -482,7 +538,8 @@ int marching_cube(int _isolevel) {
         updateScalarField();
         // all other levels
         histoPyramidConstruction();
-        histoPyramidTraversal();
+//        histoPyramidTraversal();
+        fakeHistoPyramidTraversal();
     }
     return sum_of_triangles;
 }
