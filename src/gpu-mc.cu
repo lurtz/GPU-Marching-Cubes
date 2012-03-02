@@ -421,6 +421,8 @@ unsigned int getNumberOfTriangles() {
         sum = sum_3d_array<uint1>(pair);
     sum_of_triangles = sum;
     std::cout << "you will get " << sum << " triangles" << std::endl;
+    if (sum > 65000)
+        std::cout << "remember that you have maximum size of 65000+x in x and y dimension on the grid" << std::endl;
 
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
     return sum;
