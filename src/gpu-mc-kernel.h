@@ -537,13 +537,11 @@ __global__ void traverseHP(
         float3 * VBOBuffer,
         int isolevel,
         int sum,
-        int log2BlockWidth, int mask, int log2CubeWidth, 
+        int log2Size,
         unsigned int size
         ) {
     
-    uint4 pos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
-    unsigned int target = getId(pos, log2BlockWidth, log2CubeWidth);
-    int log2Size = log2BlockWidth + log2CubeWidth;
+    unsigned int target = threadIdx.x;
     if(target >= sum)
         //target = 0;
         return;
@@ -602,10 +600,22 @@ __global__ void traverseHP(
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
 
-        // TODO verify vertexNr, check if all triangles are hardcoded
         VBOBuffer[target*6 + vertexNr] = vertex;
         VBOBuffer[target*6 + vertexNr + 3] = normal;
 
-        ++vertexNr;
+         if (target == 0) {
+            if (vertexNr == 0) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 000.0f);
+            }
+            if (vertexNr == 1) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 000.0f);
+            }
+            if (vertexNr == 2) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 000.0f);
+            }
+            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
+        }
+ 
+       ++vertexNr;
     }
 }

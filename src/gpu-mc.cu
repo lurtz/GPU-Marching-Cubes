@@ -81,6 +81,13 @@ bool handleCudaError(const cudaError_t& status) {
             error_msg = "cudaErrorUnknown";
             break;
         }
+        case cudaErrorLaunchTimeout: {
+            error_msg = "cudaErrorLaunchTimeout";
+            break;
+        }
+        case cudaSuccess: {
+            break;
+        }
         default: {
             error_msg = "unknown error";
             break;
@@ -442,17 +449,15 @@ int histoPyramidTraversal() {
     float3 * triangle_data = getTriangleDataPointer();
     assert(triangle_data != NULL);
 
-    // extremely broken, we dont have a cubic data layout anymore
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
-    dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
-    dim3 grid((pair.first.depth / CUBESIZE) * (pair.first.depth / CUBESIZE), pair.first.depth / CUBESIZE, 1);
-    int log2GridSize = log2(pair.first.depth / CUBESIZE);
+    dim3 block(1, 1, 1);
+    dim3 grid(sum_of_triangles, 1, 1);
     
     traverseHP<<<grid, block>>>(
         triangle_data,
         isolevel,
         sum_of_triangles,
-        log2GridSize, pair.first.depth/CUBESIZE-1, LOG2CUBESIZE, 
+        log2(pair.first.depth),
         pair.first.depth
         );
     
@@ -465,7 +470,6 @@ int fakeHistoPyramidTraversal() {
     getNumberOfTriangles();
     float3 * triangle_data = getTriangleDataPointer();
 
-    // fail! number of triangles, not number of cubes!
     dim3 block(1, 1, 1);
     dim3 grid(sum_of_triangles, 1, 1);
     
@@ -538,8 +542,8 @@ int marching_cube(int _isolevel) {
         updateScalarField();
         // all other levels
         histoPyramidConstruction();
-//        histoPyramidTraversal();
-        fakeHistoPyramidTraversal();
+        histoPyramidTraversal();
+//        fakeHistoPyramidTraversal();
     }
     return sum_of_triangles;
 }
