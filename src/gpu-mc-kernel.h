@@ -1,5 +1,4 @@
 #include <device_functions.h>
-//#include <iostream>
 
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -533,6 +532,11 @@ __global__ void fillVBO(float3 * VBOBuffer) {
 
 }
 
+__device__ bool operator==(const float3& a, const float3& b) {
+    float eps = 0.00001;
+    return abs(a.x - b.x) < eps && abs(a.y - b.y) < eps && abs(a.z - b.z) < eps;
+}
+
 __global__ void traverseHP(
         float3 * VBOBuffer,
         int isolevel,
@@ -540,7 +544,6 @@ __global__ void traverseHP(
         int log2Size,
         unsigned int size
         ) {
-    
     unsigned int target = threadIdx.x;
     if(target >= sum)
         //target = 0;
@@ -603,7 +606,7 @@ __global__ void traverseHP(
         VBOBuffer[target*6 + vertexNr] = vertex;
         VBOBuffer[target*6 + vertexNr + 3] = normal;
 
-         if (target == 0) {
+         if (target == 0 && false) {
             if (vertexNr == 0) {
                 VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 000.0f);
             }
@@ -612,6 +615,34 @@ __global__ void traverseHP(
             }
             if (vertexNr == 2) {
                 VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 000.0f);
+            }
+            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (vertex == make_float3(0.0f, 0.0f, 0.0f)) {
+            if (vertexNr == 0) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 200.0f);
+            }
+            if (vertexNr == 1) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 200.0f);
+            }
+            if (vertexNr == 2) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 200.0f);
+            }
+            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
+        }
+
+        float limit = -10.000000000;
+//        if (false)
+        if (abs(vertex.x) > limit || abs(vertex.y) > limit || abs(vertex.z) > limit) {
+            if (vertexNr == 0) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 200.0f);
+            }
+            if (vertexNr == 1) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 200.0f);
+            }
+            if (vertexNr == 2) {
+                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 200.0f);
             }
             VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
         }
