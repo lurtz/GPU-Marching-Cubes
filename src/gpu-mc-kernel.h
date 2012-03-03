@@ -391,8 +391,11 @@ inline __device__ void write_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size
     *get_voxel_address<T>(cpptr, pos, log2Size) = value;
 }
 
-inline __device__ float3 mix(float3 x, float3 y, float a) {
-  return x + (y-x)*a;
+__device__ float3 mix(float3 x, float3 y, float a) {
+  float3 diff = x-y;
+  float3 scaled = diff*a;
+  float3 ret_val = x + scaled;
+  return ret_val;
 }
 
 __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char * rawData, int isolevel, int log2BlockWidth, int mask, int log2CubeWidth, unsigned int volumeSize) {
@@ -597,6 +600,7 @@ __global__ void traverseHP(
             );
 
         const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
+        // TODO ARG BAD PROBLEM DETECTED! x / 0 !
         const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);

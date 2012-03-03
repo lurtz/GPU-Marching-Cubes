@@ -14,7 +14,7 @@ unsigned int SIZE;
 unsigned int rawMemSize;
 unsigned char * rawDataPtr;
 struct cudaGraphicsResource * vbo_cuda = NULL;
-GLuint vbo_gl;
+GLuint vbo_gl = 0;
 size_t vbo_size = 0;
 
 unsigned int sum_of_triangles = 0;
@@ -106,7 +106,8 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
         exit(1);
     }
     vbo_gl = vbo;
-    handleCudaError(cudaGLSetGLDevice(0));
+    if (vbo != 0)
+        handleCudaError(cudaGLSetGLDevice(0));
 
     SIZE = size;
 
@@ -117,14 +118,14 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     bufferSize.width = SIZE * sizeof(uchar4);
     bufferSize.height = SIZE;
     bufferSize.depth = SIZE;
-    cudaMalloc3D(&tmpDataPtr, bufferSize);
+    handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
     handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
     bufferSize.width = bufferSize.depth/2 * sizeof(uchar1);
     bufferSize.height = bufferSize.depth/2;
     bufferSize.depth = bufferSize.depth/2;
-    cudaMalloc3D(&tmpDataPtr, bufferSize);
+    handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
     handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
@@ -133,7 +134,7 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
         bufferSize.width = bufferSize.depth/2 * sizeof(ushort1);
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
-        cudaMalloc3D(&tmpDataPtr, bufferSize);
+        handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
         handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
@@ -149,15 +150,15 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
             bufferSize.height = 2;
             bufferSize.depth = 2;
         }
-        cudaMalloc3D(&tmpDataPtr, bufferSize);
+        handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
         handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
     // Transfer dataset to device
     rawMemSize = SIZE*SIZE*SIZE*sizeof(unsigned char);
-    cudaMalloc((void **) &rawDataPtr, rawMemSize);
-    cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice);
+    handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
+    handleCudaError(cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice));
 //    delete[] voxels;
 }
 
@@ -400,8 +401,7 @@ size_t resizeVBOIfNeeded(bool clear = false) {
     // resize buffer
     // normals, triangles, three coordinates, three points in float
     size_t buffer_size = sum_of_triangles*2*3*3*sizeof(float);
-    // just increasing the buffer would be enough as well, but atm this is easier
-    if (buffer_size > vbo_size)
+    if (buffer_size > vbo_size && vbo_gl != 0)
         resizeVBO(buffer_size, clear);
     return buffer_size;
 }
@@ -432,12 +432,23 @@ float3 * getTriangleDataPointer() {
     size_t buffer_size = resizeVBOIfNeeded(true);
 
     float3 * triangle_data = NULL;
-    cudaGraphicsMapResources(1, &vbo_cuda, 0);
-    size_t num_bytes = 0;
-    cudaGraphicsResourceGetMappedPointer((void**)&triangle_data, &num_bytes, vbo_cuda);
-    assert(num_bytes >= buffer_size);
+    if (vbo_gl != 0) {
+        handleCudaError(cudaGraphicsMapResources(1, &vbo_cuda, 0));
+        size_t num_bytes = 0;
+        handleCudaError(cudaGraphicsResourceGetMappedPointer((void**)&triangle_data, &num_bytes, vbo_cuda));
+        assert(num_bytes >= buffer_size);
+    } else {
+        handleCudaError(cudaMalloc(&triangle_data, buffer_size));
+    }
 
     return triangle_data;
+}
+
+void freeResources(float3 * triangle_data) {
+    if (vbo_gl != 0)
+        handleCudaError(cudaGraphicsUnmapResources(1, &vbo_cuda, 0));
+    else
+        handleCudaError(cudaFree(triangle_data));
 }
 
 // creates the VBO
@@ -451,7 +462,6 @@ int histoPyramidTraversal() {
     float3 * triangle_data = getTriangleDataPointer();
     assert(triangle_data != NULL);
 
-    std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
     dim3 block(1, 1, 1);
     dim3 grid(sum_of_triangles, 1, 1);
     
@@ -459,11 +469,11 @@ int histoPyramidTraversal() {
         triangle_data,
         isolevel,
         sum_of_triangles,
-        log2(pair.first.depth),
-        pair.first.depth
+        log2(SIZE),
+        SIZE
         );
     
-    cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
+    freeResources(triangle_data);
     return sum_of_triangles;
 }
 
@@ -479,7 +489,7 @@ int fakeHistoPyramidTraversal() {
         triangle_data
         );
     
-    cudaGraphicsUnmapResources(1, &vbo_cuda, 0);
+    freeResources(triangle_data);
     return sum_of_triangles;
 
 }
