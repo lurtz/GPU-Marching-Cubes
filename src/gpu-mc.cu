@@ -93,7 +93,7 @@ bool handleCudaError(const cudaError_t& status) {
             break;
         }
         default: {
-            error_msg = "unknown error";
+            error_msg = "unknown error, error code: " + status;
             break;
         }
     }

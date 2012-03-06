@@ -520,7 +520,7 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
 }
 
 __global__ void fillVBO(float3 * VBOBuffer) {
-    unsigned int target = threadIdx.x;
+    unsigned int target = blockIdx.x;
 
     for (char vertexNr = 0; vertexNr < 3; vertexNr++) {
         // TODO verify vertexNr, check if all triangles are hardcoded
@@ -557,7 +557,7 @@ __global__ void traverseHP(
         int log2Size,
         unsigned int size
         ) {
-    unsigned int target = threadIdx.x;
+    unsigned int target = blockIdx.x;
     if(target >= sum)
         //target = 0;
         return;
@@ -585,6 +585,10 @@ __global__ void traverseHP(
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
+
+    if (cubePosition == make_uint4(0, 0, 0, 0)) {
+        printf("cubePosition is zero!\n");
+    }
 
     char vertexNr = 0;
     const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
