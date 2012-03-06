@@ -92,14 +92,18 @@ bool handleCudaError(const cudaError_t& status) {
         case cudaSuccess: {
             break;
         }
+        case cudaErrorLaunchFailure: {
+            error_msg = "cudaErrorLaunchFailure";
+            break;
+        }
         default: {
-            error_msg = "unknown error, error code: " + status;
+            error_msg = "unknown error";
             break;
         }
     }
     
     if (status != cudaSuccess)
-        std::cout << error_msg << std::endl;
+        std::cout << error_msg << ", " << cudaGetErrorString(status) << std::endl;
 
     return status != cudaSuccess;
 }
@@ -174,6 +178,7 @@ void updateScalarField() {
     dim3 grid((_size.depth / CUBESIZE) * (_size.depth / CUBESIZE), _size.depth / CUBESIZE, 1);
     int log2GridSize = log2(_size.depth / CUBESIZE);
     kernelClassifyCubes<<<grid , block>>>(images_size_pointer.at(0).second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
+    handleCudaError(cudaGetLastError());
 }
 
 #ifdef DEBUG
@@ -213,7 +218,7 @@ T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
     parms.dstPtr = h_pitched_ptr;
     parms.extent = size;
     parms.kind = cudaMemcpyDeviceToHost;
-    cudaMemcpy3D(&parms);
+    handleCudaError(cudaMemcpy3D(&parms));
     return lvl0_data;
 }
 
@@ -310,6 +315,7 @@ void histoPyramidConstruction() {
             // all other levels
             // uint1 -> uint1
             kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+        handleCudaError(cudaGetLastError());
     }
 }
 
@@ -476,6 +482,7 @@ int histoPyramidTraversal() {
         log2(SIZE),
         SIZE
         );
+    handleCudaError(cudaGetLastError());
     
     freeResources(triangle_data);
     return sum_of_triangles;
@@ -492,29 +499,32 @@ int fakeHistoPyramidTraversal() {
     fillVBO<<<grid, block>>>(
         triangle_data
         );
+    handleCudaError(cudaGetLastError());
     
     freeResources(triangle_data);
     return sum_of_triangles;
 
 }
 
-bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
-    return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
-}
-
 bool testCudaPitchedPtrOnDevice() {
-    std::pair<cudaExtent, cudaPitchedPtr> pair = images_size_pointer.back();
     dim3 grid(1,1,1);
     dim3 block(1,1,1);
-    unsigned int h_count = 0;
-    unsigned int * d_count;
-    cudaMalloc(&d_count, sizeof(unsigned int));
-    sum_values_of_pitched_ptr<<<grid, block>>>(d_count, pair.first.depth, log2(pair.first.depth));
-    cudaMemcpy(&h_count, d_count, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    cudaFree(d_count);
-    bool success = sum_of_triangles == h_count;
-    if (!success)
-        std::cout << "something is wrong with the cudaPitchedPtr copied to the GPU via cudaMemcpyToSymbol" << std::endl;
+    bool h_success = true;
+    bool * d_success;
+    handleCudaError(cudaMalloc(&d_success, sizeof(bool)));
+    bool success = true;
+    unsigned int i = 0;
+    for (std::vector<std::pair<cudaExtent, cudaPitchedPtr> >::iterator iter = images_size_pointer.begin(); iter != images_size_pointer.end(); iter++, i++) {
+        std::pair<cudaExtent, cudaPitchedPtr> pair = *iter;
+        cmp_pitched_ptr<<<grid, block>>>(i, pair.second, d_success);
+        handleCudaError(cudaGetLastError());
+        cudaMemcpy(&h_success, d_success, sizeof(bool), cudaMemcpyDeviceToHost);
+        if (!h_success) {
+            std::cout << "something is wrong with the cudaPitchedPtr copied to the GPU via cudaMemcpyToSymbol at level " << i << std::endl;
+        }
+        success &= h_success;
+    }
+    handleCudaError(cudaFree(d_success));
     return success;
 }
 
