@@ -373,7 +373,7 @@ inline __host__ __device__ float3 operator+(float3 a, float3 b) {
     return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
-inline __host__ __device__ uint4 operator+=(uint4 a, uint4 b) {
+inline __host__ __device__ uint4 operator+=(uint4& a, const uint4& b) {
     a.x += b.x;
     a.y += b.y;
     a.z += b.z;
@@ -414,8 +414,7 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
     uint4 pos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
     
     unsigned int id = getId(pos, log2BlockWidth, log2CubeWidth);
-
-    unsigned char first = rawData[getId(pos, log2BlockWidth, log2CubeWidth)];
+    unsigned char first = rawData[id];
 
     // was not done in the opencl programm, maybe not needed
     // avoid looking over array boundaries
@@ -461,17 +460,28 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
 }
 
 #ifdef DEBUG
-__global__ void sum_values_of_pitched_ptr(unsigned int * d_sum, int size, int log2Size) {
-    cudaPitchedPtr cpptr = levels[num_of_levels-1];
-    *d_sum = 0;
-    for (unsigned int x = 0; x < size; x++)
-        for (unsigned int y = 0; y < size; y++)
-            for (unsigned int z = 0; z < size; z++) {
-                uint4 pos = make_uint4(x, y, z, 0);
-                *d_sum += get_voxel<uint1>(cpptr, pos, log2Size).x;
-            }
+__device__ __host__ bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
+    return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
+}
+
+__global__ void cmp_pitched_ptr(unsigned int level, cudaPitchedPtr cpptr, bool * success) {
+    cudaPitchedPtr cpptr_device = levels[level];
+    *success = cpptr == cpptr_device;
 }
 #endif // DEBUG
+
+__constant__ __device__ int max_target = 10;
+__constant__ __device__ int min_target = 0;
+
+template<typename T>
+__device__ void printArray(T * array, unsigned int size, int target, char * name) {
+    printf("target: %d, %s[%d] = {\n", target, name, size);
+    for (unsigned int i = 0; i < size; i++) {
+        if (array[i] != 0)
+        printf("target: %d,   %d\n", target, array[i]);
+    }
+    printf("target: %d, }\n", target);
+}
 
 template<typename T>
 __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 current, int log2Size) {
@@ -485,6 +495,8 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
             get_voxel<T>(hp, current + cubeOffsets[6], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[7], log2Size).x
     };
+    if (min_target <= target && target < max_target)
+        printArray(neighbors, 8, target, "neighbors");
 
     int acc = current.w + neighbors[0];
     bool cmp[8];
@@ -503,7 +515,13 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
     cmp[6] = acc <= target;
     cmp[7] = 0;
 
-    current += cubeOffsets[(cmp[0]+cmp[1]+cmp[2]+cmp[3]+cmp[4]+cmp[5]+cmp[6]+cmp[7])];
+    unsigned int sum = (cmp[0]+cmp[1]+cmp[2]+cmp[3]+cmp[4]+cmp[5]+cmp[6]+cmp[7]);
+    uint4 offset = cubeOffsets[sum];
+    if (min_target <= target && target < max_target) {
+        printf("target: %d, sum = %d\n", target, sum);
+        printf("target: %d, offset = (%d, %d, %d)\n", target, offset.x, offset.y, offset.z);
+    }
+    current += offset;
     current.x = current.x*2;
     current.y = current.y*2;
     current.z = current.z*2;
@@ -516,6 +534,8 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
         cmp[5]*neighbors[5] + 
         cmp[6]*neighbors[6] + 
         cmp[7]*neighbors[7];
+    if (min_target <= target && target < max_target)
+        printf("target: %d, cubePosition is now: (%d, %d, %d, %d)\n", target, current.x, current.y, current.z, current.w);
     return current;
 }
 
@@ -523,7 +543,6 @@ __global__ void fillVBO(float3 * VBOBuffer) {
     unsigned int target = blockIdx.x;
 
     for (char vertexNr = 0; vertexNr < 3; vertexNr++) {
-        // TODO verify vertexNr, check if all triangles are hardcoded
         float3 vertex;
         float3 normal;
         if (vertexNr == 0) {
@@ -550,6 +569,10 @@ __device__ bool operator==(const float3& a, const float3& b) {
     return abs(a.x - b.x) < eps && abs(a.y - b.y) < eps && abs(a.z - b.z) < eps;
 }
 
+__device__ bool operator==(const uint4& a, const uint4& b) {
+    return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
+}
+
 __global__ void traverseHP(
         float3 * VBOBuffer,
         int isolevel,
@@ -563,6 +586,8 @@ __global__ void traverseHP(
         return;
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
+    if (min_target <= target && target < max_target)
+        printf("target: %d, cubePosition at start: (%d, %d, %d, %d)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w);
     if (size > 512)
         cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
     
@@ -587,8 +612,11 @@ __global__ void traverseHP(
     cubePosition.z = cubePosition.z / 2;
 
     if (cubePosition == make_uint4(0, 0, 0, 0)) {
-        printf("cubePosition is zero!\n");
+//        printf("cubePosition is zero!\n");
+        return;
     }
+//    printf("cubePosition is not zero\n");
+    return;
 
     char vertexNr = 0;
     const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
