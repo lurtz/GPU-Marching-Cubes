@@ -85,6 +85,10 @@ bool handleCudaError(const cudaError_t& status) {
             error_msg = "cudaErrorLaunchTimeout";
             break;
         }
+        case cudaErrorNoDevice: {
+            error_msg = "cudaErrorNoDevice";
+            break;
+        }
         case cudaSuccess: {
             break;
         }
@@ -543,6 +547,7 @@ bool runTests(unsigned char * voxels) {
   bool success = testUpdateScalarField(voxels);
   success &= testHistoPyramidConstruction();
   success &= testHistoPyramidTraversal();
+//  cudaDeviceReset();
   return success;
 }
 #endif // DEBUG

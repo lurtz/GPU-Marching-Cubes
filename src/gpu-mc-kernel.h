@@ -1,4 +1,14 @@
 #include <device_functions.h>
+#include <stdio.h>
+
+#ifndef gpu_mc_kernel_h__
+#define gpu_mc_kernel_h__
+
+// printf() is only supported
+// for devices of compute capability 2.0 and above
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+#define printf(f, ...) ((void)(f, __VA_ARGS__),0)
+#endif
 
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -601,6 +611,10 @@ __global__ void traverseHP(
 
         const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
         // TODO ARG BAD PROBLEM DETECTED! x / 0 !
+//        if (target == 0) {
+//            printf("blocknumber is %d\n", blockIdx.x);
+//            printf("value0 is %d\n", value0);
+//        }
         const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
@@ -654,3 +668,5 @@ __global__ void traverseHP(
        ++vertexNr;
     }
 }
+
+#endif // gpu_mc_kernel_h__
