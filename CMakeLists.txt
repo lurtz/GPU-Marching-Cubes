@@ -20,8 +20,8 @@ set(CMAKE_BUILD_TYPE debug)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x ${VALID_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
-set(CUDA_NVCC_FLAGS "-g;-G")
-#set(CUDA_NVCC_FLAGS "-g;-G;-arch;sm_20")
+#set(CUDA_NVCC_FLAGS "-g;-G")
+set(CUDA_NVCC_FLAGS "-g;-G;-arch;sm_20")
 #set(CUDA_ARCH_LIST "sm_20")
 
 # Adding src directory to the project
