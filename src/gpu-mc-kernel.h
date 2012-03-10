@@ -612,11 +612,11 @@ __global__ void traverseHP(
     cubePosition.z = cubePosition.z / 2;
 
     if (cubePosition == make_uint4(0, 0, 0, 0)) {
-//        printf("cubePosition is zero!\n");
+        printf("cubePosition is zero!\n");
         return;
     }
 //    printf("cubePosition is not zero\n");
-    return;
+//    return;
 
     char vertexNr = 0;
     const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
@@ -642,16 +642,19 @@ __global__ void traverseHP(
             );
 
         const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
-        // TODO ARG BAD PROBLEM DETECTED! x / 0 !
-//        if (target == 0) {
-//            printf("blocknumber is %d\n", blockIdx.x);
-//            printf("value0 is %d\n", value0);
-//        }
+        if (min_target <= target && target < max_target)
+            printf("target: %d, cubePosition: (%d, %d, %d, %d), value0: %d\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, value0);
+
         const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
+
+        if (min_target <= target && target < max_target) {
+            printf("target: %d, cubePosition: (%d, %d, %d, %d), vertex: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, vertex.x, vertex.y, vertex.z);
+            printf("target: %d, cubePosition: (%d, %d, %d, %d), normal: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, normal.x, normal.y, normal.z);
+        }
 
         VBOBuffer[target*6 + vertexNr] = vertex;
         VBOBuffer[target*6 + vertexNr + 3] = normal;
