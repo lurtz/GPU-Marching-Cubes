@@ -4,6 +4,8 @@
 #include <string>
 #include <iostream>
 
+const bool use_opengl = false;
+
 int main(int argc, char * argv[]) {
   int stepSizeX = 1;
   int stepSizeY = 1;
@@ -31,7 +33,8 @@ int main(int argc, char * argv[]) {
   }
 
   int size = prepareDataset(&voxel_data_ptr, dim[0]/stepSizeX, dim[1]/stepSizeY, dim[2]/stepSizeZ);
-//  setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
+  if (use_opengl)
+    setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
   setupCuda(voxel_data_ptr, size, getVBO());
 
   #ifdef DEBUG
@@ -42,7 +45,10 @@ int main(int argc, char * argv[]) {
 
   delete [] voxel_data_ptr; 
 
-//  run();
+  if (use_opengl)
+    run();
+  else
+    marching_cube(50);
 
   return 0;
 }

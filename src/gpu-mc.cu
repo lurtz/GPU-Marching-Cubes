@@ -5,6 +5,8 @@
 #include <iostream>
 #include <cassert>
 #include <cuda_gl_interop.h>
+#include <cmath>
+#include <ctime>
 
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
@@ -31,7 +33,7 @@ unsigned int sum_of_triangles = 0;
 // sixth level and more uses int
 std::vector<std::pair<cudaExtent, cudaPitchedPtr> > images_size_pointer;
 
-int isolevel = 50;
+int isolevel = 49;
 
 template<typename T>
 T log2(T val) {
@@ -94,6 +96,10 @@ bool handleCudaError(const cudaError_t& status) {
         }
         case cudaErrorLaunchFailure: {
             error_msg = "cudaErrorLaunchFailure";
+            break;
+        }
+        case cudaErrorInvalidDeviceFunction: {
+            error_msg = "cudaErrorInvalidDeviceFunction";
             break;
         }
         default: {
@@ -163,6 +169,11 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
+    // copy cudapitchedPtr to device
+    for (unsigned int i = 0; i < images_size_pointer.size(); i++) {
+        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
+    }
+
     // Transfer dataset to device
     rawMemSize = SIZE*SIZE*SIZE*sizeof(unsigned char);
     handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
@@ -218,7 +229,9 @@ T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
     parms.dstPtr = h_pitched_ptr;
     parms.extent = size;
     parms.kind = cudaMemcpyDeviceToHost;
+    clock_t start = clock();
     handleCudaError(cudaMemcpy3D(&parms));
+    std::cout << "get_data_from_pitched_ptr: cudaMemcpy took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     return lvl0_data;
 }
 
@@ -330,8 +343,12 @@ unsigned int sum_3d_array(T const * const _3darray, const cudaExtent& dim) {
 
 template<typename T>
 unsigned int sum_3d_array(const std::pair<cudaExtent, cudaPitchedPtr>& pair) {
+    clock_t start = clock();
     T* sum_of_triangles_from_gpu = get_data_from_pitched_ptr<T>(pair);
+    std::cout << "sum_3d_array: get_data_from_pitched_ptr took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
+    start = clock();
     unsigned int sum = sum_3d_array(sum_of_triangles_from_gpu, pair.first);
+    std::cout << "sum_3d_array: sum_3d_array took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     delete [] sum_of_triangles_from_gpu;
     return sum;
 }
@@ -421,6 +438,7 @@ unsigned int getNumberOfTriangles() {
     assert(log2(SIZE) == images_size_pointer.size());
     size_t num_of_levels = images_size_pointer.size();
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
+    clock_t start = clock();
     if (num_of_levels == 1)
         sum = sum_3d_array<uchar4>(pair);
     else if (num_of_levels == 2)
@@ -429,12 +447,13 @@ unsigned int getNumberOfTriangles() {
         sum = sum_3d_array<ushort1>(pair);
     else
         sum = sum_3d_array<uint1>(pair);
+    std::cout << "getNumberOfTriangles: sum_3d_array took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     sum_of_triangles = sum;
     std::cout << "you will get " << sum << " triangles" << std::endl;
-    if (sum > 65000)
-        std::cout << "remember that you have maximum size of 65000+x in x and y dimension on the grid" << std::endl;
 
+    start = clock();
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
+    std::cout << "getNumberOfTriangles: copying number of levels to gpu took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     return sum;
 }
 
@@ -463,25 +482,31 @@ void freeResources(float3 * triangle_data) {
 
 // creates the VBO
 int histoPyramidTraversal() {
+    clock_t start = clock();
     getNumberOfTriangles();
+    std::cout << "histoPyramidTraversal: getting number of triangles took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
 
-    for (unsigned int i = 0; i < images_size_pointer.size(); i++) {
-        handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
-    }
-
+    start = clock();
     float3 * triangle_data = getTriangleDataPointer();
     assert(triangle_data != NULL);
+    std::cout << "histoPyramidTraversal: allocating VBO took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
 
-    dim3 block(1, 1, 1);
-    dim3 grid(sum_of_triangles, 1, 1);
+    dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
+    int number_of_blocks = sum_of_triangles/CUBESIZE/CUBESIZE/CUBESIZE;
+    int grid_dim_x = floor(sqrt(number_of_blocks));
+    int grid_dim_y = ceil(number_of_blocks/grid_dim_x);
+    dim3 grid(grid_dim_x, grid_dim_y, 1);
     
+    start = clock();
     traverseHP<<<grid, block>>>(
         triangle_data,
         isolevel,
         sum_of_triangles,
         log2(SIZE),
-        SIZE
+        SIZE,
+        LOG2CUBESIZE
         );
+    std::cout << "histoPyramidTraversal: traverseHP took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     handleCudaError(cudaGetLastError());
     
     freeResources(triangle_data);
@@ -489,23 +514,6 @@ int histoPyramidTraversal() {
 }
 
 #ifdef DEBUG
-int fakeHistoPyramidTraversal() {
-    getNumberOfTriangles();
-    float3 * triangle_data = getTriangleDataPointer();
-
-    dim3 block(1, 1, 1);
-    dim3 grid(sum_of_triangles, 1, 1);
-    
-    fillVBO<<<grid, block>>>(
-        triangle_data
-        );
-    handleCudaError(cudaGetLastError());
-    
-    freeResources(triangle_data);
-    return sum_of_triangles;
-
-}
-
 bool testCudaPitchedPtrOnDevice() {
     dim3 grid(1,1,1);
     dim3 block(1,1,1);
@@ -565,12 +573,19 @@ bool runTests(unsigned char * voxels) {
 int marching_cube(int _isolevel) {
     if (isolevel != _isolevel) {
         isolevel = _isolevel; 
+        clock_t start = clock();
         // first level
         updateScalarField();
+        std::cout << "updateScalarField took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
+
         // all other levels
+        start = clock();
         histoPyramidConstruction();
+        std::cout << "histoPyramidConstruction took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
+
+        start = clock();
         histoPyramidTraversal();
-//        fakeHistoPyramidTraversal();
+        std::cout << "histoPyramidTraversal took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     }
     return sum_of_triangles;
 }

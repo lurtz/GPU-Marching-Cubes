@@ -10,6 +10,8 @@
 #define printf(f, ...) ((void)(f, __VA_ARGS__),0)
 #endif
 
+//#define USE_PRINTF false
+
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
 		{1, 0, 0, 0},
@@ -495,8 +497,10 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
             get_voxel<T>(hp, current + cubeOffsets[6], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[7], log2Size).x
     };
+    #ifdef USE_PRINTF
     if (min_target <= target && target < max_target)
         printArray(neighbors, 8, target, "neighbors");
+    #endif
 
     int acc = current.w + neighbors[0];
     bool cmp[8];
@@ -517,10 +521,12 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
 
     unsigned int sum = (cmp[0]+cmp[1]+cmp[2]+cmp[3]+cmp[4]+cmp[5]+cmp[6]+cmp[7]);
     uint4 offset = cubeOffsets[sum];
+    #ifdef USE_PRINTF
     if (min_target <= target && target < max_target) {
         printf("target: %d, sum = %d\n", target, sum);
         printf("target: %d, offset = (%d, %d, %d)\n", target, offset.x, offset.y, offset.z);
     }
+    #endif
     current += offset;
     current.x = current.x*2;
     current.y = current.y*2;
@@ -534,34 +540,11 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
         cmp[5]*neighbors[5] + 
         cmp[6]*neighbors[6] + 
         cmp[7]*neighbors[7];
+    #ifdef USE_PRINTF
     if (min_target <= target && target < max_target)
         printf("target: %d, cubePosition is now: (%d, %d, %d, %d)\n", target, current.x, current.y, current.z, current.w);
+    #endif
     return current;
-}
-
-__global__ void fillVBO(float3 * VBOBuffer) {
-    unsigned int target = blockIdx.x;
-
-    for (char vertexNr = 0; vertexNr < 3; vertexNr++) {
-        float3 vertex;
-        float3 normal;
-        if (vertexNr == 0) {
-            vertex = make_float3(0.0f, 200.0f, 000.0f);
-        }
-        if (vertexNr == 1) {
-            vertex = make_float3(100.0f, 200.0f, 000.0f);
-        }
-        if (vertexNr == 2) {
-            vertex = make_float3(100.0f, 300.0f, 000.0f);
-        }
-        normal = make_float3(0.0f, 0.0f, 1.0f);        
-        // content of VBO seems to be of no effect
-//        vertex = make_float3(0.0f, 0.0f, 0.0f);
-
-        VBOBuffer[target*6 + vertexNr] = vertex;
-        VBOBuffer[target*6 + vertexNr + 3] = normal;
-    }
-
 }
 
 __device__ bool operator==(const float3& a, const float3& b) {
@@ -578,16 +561,22 @@ __global__ void traverseHP(
         int isolevel,
         int sum,
         int log2Size,
-        unsigned int size
+        unsigned int size,
+        unsigned int log2CubeWidth
         ) {
-    unsigned int target = blockIdx.x;
+    unsigned int target = (blockIdx.y * blockDim.x + blockIdx.x) << log2CubeWidth;
+    target = (target + threadIdx.z) << log2CubeWidth;
+    target = (target + threadIdx.y) << log2CubeWidth;
+    target += threadIdx.x;
     if(target >= sum)
         //target = 0;
         return;
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
+    #ifdef USE_PRINTF
     if (min_target <= target && target < max_target)
         printf("target: %d, cubePosition at start: (%d, %d, %d, %d)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w);
+    #endif
     if (size > 512)
         cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
     
@@ -612,11 +601,11 @@ __global__ void traverseHP(
     cubePosition.z = cubePosition.z / 2;
 
     if (cubePosition == make_uint4(0, 0, 0, 0)) {
-        printf("cubePosition is zero!\n");
+        #ifdef USE_PRINTF
+        printf("cubePosition is zero! (%d, %d, %d)\n", cubePosition.x, cubePosition.y, cubePosition.z);
+        #endif
         return;
     }
-//    printf("cubePosition is not zero\n");
-//    return;
 
     char vertexNr = 0;
     const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
@@ -642,8 +631,10 @@ __global__ void traverseHP(
             );
 
         const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
+        #ifdef USE_PRINTF
         if (min_target <= target && target < max_target)
             printf("target: %d, cubePosition: (%d, %d, %d, %d), value0: %d\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, value0);
+        #endif
 
         const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
@@ -651,56 +642,17 @@ __global__ void traverseHP(
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
 
+        #ifdef USE_PRINTF
         if (min_target <= target && target < max_target) {
             printf("target: %d, cubePosition: (%d, %d, %d, %d), vertex: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, vertex.x, vertex.y, vertex.z);
             printf("target: %d, cubePosition: (%d, %d, %d, %d), normal: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, normal.x, normal.y, normal.z);
         }
+        #endif
 
         VBOBuffer[target*6 + vertexNr] = vertex;
         VBOBuffer[target*6 + vertexNr + 3] = normal;
 
-         if (target == 0 && false) {
-            if (vertexNr == 0) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 000.0f);
-            }
-            if (vertexNr == 1) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 000.0f);
-            }
-            if (vertexNr == 2) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 000.0f);
-            }
-            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
-        }
-
-        if (vertex == make_float3(0.0f, 0.0f, 0.0f)) {
-            if (vertexNr == 0) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 200.0f);
-            }
-            if (vertexNr == 1) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 200.0f);
-            }
-            if (vertexNr == 2) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 200.0f);
-            }
-            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
-        }
-
-        float limit = -10.000000000;
-//        if (false)
-        if (abs(vertex.x) > limit || abs(vertex.y) > limit || abs(vertex.z) > limit) {
-            if (vertexNr == 0) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(-100.0f, 200.0f, 200.0f);
-            }
-            if (vertexNr == 1) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 200.0f, 200.0f);
-            }
-            if (vertexNr == 2) {
-                VBOBuffer[target*6 + vertexNr] = make_float3(100.0f, 300.0f, 200.0f);
-            }
-            VBOBuffer[target*6 + vertexNr + 3] = make_float3(0.0f, 0.0f, 1.0f);
-        }
- 
-       ++vertexNr;
+        ++vertexNr;
     }
 }
 
