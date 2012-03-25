@@ -600,13 +600,6 @@ __global__ void traverseHP(
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
 
-    if (cubePosition == make_uint4(0, 0, 0, 0)) {
-        #ifdef USE_PRINTF
-        printf("cubePosition is zero! (%d, %d, %d)\n", cubePosition.x, cubePosition.y, cubePosition.z);
-        #endif
-        return;
-    }
-
     char vertexNr = 0;
     const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
 
@@ -649,8 +642,8 @@ __global__ void traverseHP(
         }
         #endif
 
-        VBOBuffer[target*6 + vertexNr] = vertex;
-        VBOBuffer[target*6 + vertexNr + 3] = normal;
+        VBOBuffer[target*6 + vertexNr*2] = vertex;
+        VBOBuffer[target*6 + vertexNr*2 + 1] = normal;
 
         ++vertexNr;
     }
