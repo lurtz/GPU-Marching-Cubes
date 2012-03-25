@@ -102,23 +102,25 @@ bool handleCudaError(const cudaError_t& status) {
             error_msg = "cudaErrorInvalidDeviceFunction";
             break;
         }
+        case cudaErrorLaunchOutOfResources: {
+            error_msg= "cudaErrorLaunchOutOfResources";
+            break;
+        }
         default: {
             error_msg = "unknown error";
             break;
         }
     }
     
-    if (status != cudaSuccess)
-        std::cout << error_msg << ", " << cudaGetErrorString(status) << std::endl;
+    if (status != cudaSuccess) {
+        std::cout << "!!!!!!!!! " << error_msg << ", " << cudaGetErrorString(status) << " !!!!!!!!!" << std::endl;
+        exit(1);
+    }
 
     return status != cudaSuccess;
 }
 
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
-    if (vbo == 0 && false) {
-        std::cout << "Vertex Buffer Object to write into is invalid, I will exit" << std::endl;
-        exit(1);
-    }
     vbo_gl = vbo;
     if (vbo != 0)
         handleCudaError(cudaGLSetGLDevice(0));
@@ -190,6 +192,7 @@ void updateScalarField() {
     int log2GridSize = log2(_size.depth / CUBESIZE);
     kernelClassifyCubes<<<grid , block>>>(images_size_pointer.at(0).second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
     handleCudaError(cudaGetLastError());
+    cudaThreadSynchronize();
 }
 
 #ifdef DEBUG
@@ -329,6 +332,7 @@ void histoPyramidConstruction() {
             // uint1 -> uint1
             kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
         handleCudaError(cudaGetLastError());
+        cudaThreadSynchronize();
     }
 }
 
@@ -491,8 +495,12 @@ int histoPyramidTraversal() {
     assert(triangle_data != NULL);
     std::cout << "histoPyramidTraversal: allocating VBO took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
 
-    dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
-    int number_of_blocks = sum_of_triangles/CUBESIZE/CUBESIZE/CUBESIZE;
+    // TODO ask device properties how much threads can be started
+    //      there are cards, where not all 512 threads can be started, when
+    //      some data is in memory
+    unsigned int tmp_cube_size = CUBESIZE/2;
+    dim3 block(tmp_cube_size, tmp_cube_size, tmp_cube_size);
+    int number_of_blocks = sum_of_triangles/tmp_cube_size/tmp_cube_size/tmp_cube_size;
     int grid_dim_x = floor(sqrt(number_of_blocks));
     int grid_dim_y = ceil(number_of_blocks/grid_dim_x);
     dim3 grid(grid_dim_x, grid_dim_y, 1);
@@ -504,10 +512,11 @@ int histoPyramidTraversal() {
         sum_of_triangles,
         log2(SIZE),
         SIZE,
-        LOG2CUBESIZE
+        log2(tmp_cube_size)
         );
-    std::cout << "histoPyramidTraversal: traverseHP took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     handleCudaError(cudaGetLastError());
+    std::cout << "histoPyramidTraversal: traverseHP took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
+    cudaThreadSynchronize();
     
     freeResources(triangle_data);
     return sum_of_triangles;
@@ -566,6 +575,7 @@ bool runTests(unsigned char * voxels) {
   success &= testHistoPyramidConstruction();
   success &= testHistoPyramidTraversal();
 //  cudaDeviceReset();
+
   return success;
 }
 #endif // DEBUG
