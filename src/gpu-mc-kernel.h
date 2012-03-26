@@ -564,7 +564,7 @@ __global__ void traverseHP(
         unsigned int size,
         unsigned int log2CubeWidth
         ) {
-    unsigned int target = (blockIdx.y * blockDim.x + blockIdx.x) << log2CubeWidth;
+    unsigned int target = (blockIdx.y * gridDim.x + blockIdx.x) << log2CubeWidth;
     target = (target + threadIdx.z) << log2CubeWidth;
     target = (target + threadIdx.y) << log2CubeWidth;
     target += threadIdx.x;
