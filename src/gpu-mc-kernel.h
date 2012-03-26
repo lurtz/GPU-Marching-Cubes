@@ -551,9 +551,14 @@ __global__ void traverseHP(
     if (size > 64)
         cubePosition = scanHPLevel<int1>(target, levels[6], cubePosition, log2Size-6);
     
-    cubePosition = scanHPLevel<int1>(target, levels[5], cubePosition, log2Size-5);
-    cubePosition = scanHPLevel<short1>(target, levels[4], cubePosition, log2Size-4);
-    cubePosition = scanHPLevel<short1>(target, levels[3], cubePosition, log2Size-3);
+    if (size > 32)
+        cubePosition = scanHPLevel<int1>(target, levels[5], cubePosition, log2Size-5);
+
+    if (size > 16)
+        cubePosition = scanHPLevel<short1>(target, levels[4], cubePosition, log2Size-4);
+
+    if (size > 8)
+        cubePosition = scanHPLevel<short1>(target, levels[3], cubePosition, log2Size-3);
     cubePosition = scanHPLevel<short1>(target, levels[2], cubePosition, log2Size-2);
     cubePosition = scanHPLevel<char1>(target, levels[1], cubePosition, log2Size-1);
     cubePosition = scanHPLevel<uchar4>(target, levels[0], cubePosition, log2Size);
