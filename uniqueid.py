@@ -12,6 +12,7 @@ def calcId(blockIdx, threadIdx, blockDim, log2CubeWidth):
     target = (blockIdx.x * blockDim.y + blockIdx.y) << log2CubeWidth
     target = (target + threadIdx.z) << log2CubeWidth
     target = (target + threadIdx.y) << log2CubeWidth
+    target += threadIdx.x
     return target
 
 def createIds(number):
