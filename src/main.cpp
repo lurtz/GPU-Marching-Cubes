@@ -4,7 +4,8 @@
 #include <string>
 #include <iostream>
 
-const bool use_opengl = false;
+//const bool use_opengl = false;
+const bool use_opengl = true;
 
 int main(int argc, char * argv[]) {
   int stepSizeX = 1;
@@ -40,6 +41,13 @@ int main(int argc, char * argv[]) {
   #ifdef DEBUG
   if (!runTests(voxel_data_ptr))
     std::cout << "something with the tests went wrong" << std::endl;
+  std::cout 
+    << std::endl
+    << std::endl
+    << std::endl
+    << std::endl
+    ;
+
   std::cout << "no segfault here" << std::endl;
   #endif // DEBUG
 
