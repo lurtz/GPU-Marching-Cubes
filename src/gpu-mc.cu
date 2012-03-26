@@ -10,17 +10,27 @@
 #include <cmath>
 #include <ctime>
 
+// the sidelength of a block on the grid, it is always cubic, which results to
+// 8*8*8 = 512 threads per block
 const unsigned int CUBESIZE = 8;
 const unsigned int LOG2CUBESIZE = 3;
+// when the histopyramid is created 8 cubes are added and the result will be
+// saved in a new cube on a smaller volume
 const unsigned int CUBESIZEHP = 2;
 const unsigned int LOG2CUBESIZEHP = 1;
+// the size of the voxelvolume TODO not needed
 unsigned int SIZE;
+// size of the voxelvolume in bytes
 unsigned int rawMemSize;
+// pointer of voxelvolume on device memory
 unsigned char * rawDataPtr;
+// these will be used with opengl interop
+// the triangulated mesh will be written into a VBO
 struct cudaGraphicsResource * vbo_cuda = NULL;
 GLuint vbo_gl = 0;
+// used to check if the VBO is big enough for the mesh
 size_t vbo_size = 0;
-
+// how much triangles will be constructed
 unsigned int sum_of_triangles = 0;
 
 // How to use the VBO:
@@ -33,10 +43,14 @@ unsigned int sum_of_triangles = 0;
 // first to second level contain volumes with unsigned char as elements
 // third to fifth (including) level contain unsigned short as elements
 // sixth level and more uses int
+// this vector saves for each level of the histopyramid its size and the
+// pointer to device memory. level 0 is the largest with the most voxels
 std::vector<std::pair<cudaExtent, cudaPitchedPtr> > images_size_pointer;
 
+// initial isolevel
 int isolevel = 49;
 
+// slow variant of getting the binary logarithm
 template<typename T>
 T log2(T val) {
     T log2Val = 0;
@@ -46,6 +60,7 @@ T log2(T val) {
     return log2Val;
 }
 
+// check if something went wrong
 bool handleCudaError(const cudaError_t& status) {
     std::string error_msg;
     switch (status) {
@@ -123,6 +138,8 @@ bool handleCudaError(const cudaError_t& status) {
 }
 
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
+    // TODO get rid of cudaMemset3D()
+    // of vbo is zero, this is likely started via ssh
     vbo_gl = vbo;
     if (vbo != 0)
         handleCudaError(cudaGLSetGLDevice(0));
@@ -133,6 +150,7 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     cudaExtent bufferSize;
     cudaPitchedPtr tmpDataPtr;
     // Make the two first buffers use INT8
+    // first buffer
     bufferSize.width = SIZE * sizeof(uchar4);
     bufferSize.height = SIZE;
     bufferSize.depth = SIZE;
@@ -140,6 +158,7 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
+    // second buffer
     bufferSize.width = bufferSize.depth/2 * sizeof(uchar1);
     bufferSize.height = bufferSize.depth/2;
     bufferSize.depth = bufferSize.depth/2;
@@ -174,6 +193,9 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     }
 
     // copy cudapitchedPtr to device
+    // this will be used by the kernel histoPyramidTraversal(), because there is
+    // an argument limit of 256bytes and 10 levels of cudaPitchedPtr would
+    // exceed this limit
     for (unsigned int i = 0; i < images_size_pointer.size(); i++) {
         handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
     }
@@ -182,7 +204,6 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     rawMemSize = SIZE*SIZE*SIZE*sizeof(unsigned char);
     handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
     handleCudaError(cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice));
-//    delete[] voxels;
 }
 
 // classifies each voxel and calculates the number of triangles needed for this
@@ -197,6 +218,8 @@ void updateScalarField() {
     cudaThreadSynchronize();
 }
 
+// copies data from device memory into an array on host memory and returns a 
+// pointer to the array on host memory. don't forget to delete the array
 template<typename T>
 T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
     T * lvl0_data = new T[size.depth*size.depth*size.depth];
@@ -222,10 +245,12 @@ T* get_data_from_pitched_ptr(unsigned int level) {
 
 #ifdef DEBUG
 // code to test classify cubes
+// calculate a 1d index from a 3D position on a cube
 unsigned int get_index(unsigned int x, unsigned int y, unsigned int z) {
   return x + y*SIZE + z*SIZE*SIZE;
 }
 
+// given a cubeid, calculate the position it is on the 3D cube
 void get_voxel_from_cube_id(unsigned int cube_id, unsigned int *x, unsigned int *y, unsigned *z) {
   // return lower left position of cube, other points can be obtained with +0,1
   *z = cube_id / (SIZE-1) / (SIZE-1);
@@ -234,6 +259,8 @@ void get_voxel_from_cube_id(unsigned int cube_id, unsigned int *x, unsigned int 
   *x = cube_id_plane % (SIZE-1);
 }
 
+// the cubeOffsets arent used linearly in the device code. this is the mapping
+// to the used order
 int bit2Offset[] = {0, 1, 3, 2, 4, 5, 7, 6};
 uint4 lokalCubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -246,8 +273,10 @@ uint4 lokalCubeOffsets[8] = {
 		{1, 1, 1, 0},
 	}; 
 
+// the number of triangles for each case
 unsigned char lokalNrOfTriangles[256] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 2, 3, 4, 4, 3, 3, 4, 4, 3, 4, 5, 5, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 2, 3, 3, 4, 3, 4, 2, 3, 3, 4, 4, 5, 4, 5, 3, 2, 3, 4, 4, 3, 4, 5, 3, 2, 4, 5, 5, 4, 5, 2, 4, 1, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 2, 4, 3, 4, 3, 5, 2, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 3, 4, 4, 3, 4, 5, 5, 4, 4, 3, 5, 2, 5, 4, 2, 1, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 2, 3, 3, 2, 3, 4, 4, 5, 4, 5, 5, 2, 4, 3, 5, 4, 3, 2, 4, 1, 3, 4, 4, 5, 4, 5, 3, 4, 4, 5, 5, 2, 3, 4, 2, 1, 2, 3, 3, 2, 3, 4, 2, 1, 3, 2, 4, 1, 2, 1, 1, 0};
 
+// tests if the kernel updateScalarField worked correctly
 bool testUpdateScalarField(unsigned char * voxels) {
     updateScalarField();
     // get level0 data from gpu
@@ -336,6 +365,8 @@ void histoPyramidConstruction() {
     }
 }
 
+// sums the data of a 3D array. this will mainly be used to get the number of
+// triangles from the top level of the histoPyramid
 template<typename T>
 unsigned int sum_3d_array(T const * const _3darray, const cudaExtent& dim) {
     unsigned int sum = 0;
@@ -371,6 +402,8 @@ bool templatedTestHistoPyramidConstruction(unsigned int level) {
     return sum == sum_of_triangles;
 }
 
+// checks if number of triangles is equal to the sum calculated with
+// testUpdateScalarField
 bool testHistoPyramidConstruction() {
     histoPyramidConstruction();
     bool success = true;
@@ -388,6 +421,7 @@ bool testHistoPyramidConstruction() {
 }
 #endif // DEBUG
 
+// increases vbo size, if more triangles will be written
 void resizeVBO(size_t _vbo_size, bool clear) {
     if (vbo_cuda != NULL) {
         handleCudaError(cudaGraphicsUnregisterResource(vbo_cuda));
@@ -396,6 +430,7 @@ void resizeVBO(size_t _vbo_size, bool clear) {
 
     float3 * data = NULL;
     if (clear) {
+	// fill with zeros
         data = new float3[_vbo_size/sizeof(float3)];
         for (unsigned int i = 0; i < _vbo_size/sizeof(float3); i++) {
             float3 val = {0};
@@ -407,6 +442,7 @@ void resizeVBO(size_t _vbo_size, bool clear) {
     glBufferData(GL_ARRAY_BUFFER, _vbo_size, data, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+    // bind vbo with cuda
     handleCudaError(cudaGraphicsGLRegisterBuffer(&vbo_cuda, vbo_gl, cudaGraphicsMapFlagsWriteDiscard));
 
     delete [] data;
@@ -414,6 +450,7 @@ void resizeVBO(size_t _vbo_size, bool clear) {
     vbo_size = _vbo_size;
 }
 
+// checks if vbo allocated by opengl is big enough to store all triangles
 size_t resizeVBOIfNeeded(bool clear = false) {
     // resize buffer
     // normals, triangles, three coordinates, three points in float
@@ -423,6 +460,8 @@ size_t resizeVBOIfNeeded(bool clear = false) {
     return buffer_size;
 }
 
+// sums the top level of the histoPyramid and writes the number of levels used to the gpu
+// TODO setting the number of levels if not needed
 unsigned int getNumberOfTriangles() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
@@ -443,6 +482,8 @@ unsigned int getNumberOfTriangles() {
     return sum;
 }
 
+// returns a pointer to either the memory of the vbo or a cudaarray, if this is
+// run without graphics output
 float3 * getTriangleDataPointer() {
     size_t buffer_size = resizeVBOIfNeeded();
 
@@ -459,6 +500,7 @@ float3 * getTriangleDataPointer() {
     return triangle_data;
 }
 
+// makes the vbo available to opengl again or frees the cudaarray
 void freeResources(float3 * triangle_data) {
     if (vbo_gl != 0)
         handleCudaError(cudaGraphicsUnmapResources(1, &vbo_cuda, 0));
@@ -467,6 +509,7 @@ void freeResources(float3 * triangle_data) {
 }
 
 // creates the VBO
+// walk down the histopyramid to the base level. each thread gets a triangle, which he has to create and store in the vbo
 int histoPyramidTraversal() {
     getNumberOfTriangles();
 
@@ -503,6 +546,9 @@ int histoPyramidTraversal() {
 }
 
 #ifdef DEBUG
+// because of warnings during compilation, test if the cudaPitchedPtr, which are
+// copied onto the gpu are valid and stay the same as if they are passed via
+// parameters
 bool testCudaPitchedPtrOnDevice() {
     dim3 grid(1,1,1);
     dim3 block(1,1,1);
@@ -525,6 +571,8 @@ bool testCudaPitchedPtrOnDevice() {
     return success;
 }
 
+// doesn't really test the kernel. just tests some things which are used by the
+// kernel. the kernel was tested with opengl
 bool testHistoPyramidTraversal() {
     histoPyramidTraversal();
     bool success = true;

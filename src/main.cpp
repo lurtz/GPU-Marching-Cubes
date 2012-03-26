@@ -16,6 +16,7 @@ int main(int argc, char * argv[]) {
   float scaleX = 1;
   float scaleY = 1;
   float scaleZ = 1;
+  // if a file is given, load the voxelvolume, else create a sphere
   std::string file("");
   if (argc > 1)
     file = argv[1];
@@ -35,6 +36,7 @@ int main(int argc, char * argv[]) {
     voxel_data_ptr = create_voxel_sphere(dim);
   }
 
+  // setup cuda and opengl
   int size = prepareDataset(&voxel_data_ptr, dim[0]/stepSizeX, dim[1]/stepSizeY, dim[2]/stepSizeZ);
   if (use_opengl)
     setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
