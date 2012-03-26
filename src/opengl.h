@@ -1,3 +1,5 @@
+/* see LICENSE file for copyright and license details */
+
 #ifndef __OPENGL_H__
 #define __OPENGL_H__
 

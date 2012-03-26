@@ -1,3 +1,5 @@
+/* see LICENSE file for copyright and license details */
+
 #include "gpu-mc.h"
 #include "gpu-mc-kernel.h"
 #include <utility>

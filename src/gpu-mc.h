@@ -1,3 +1,5 @@
+/* see LICENSE file for copyright and license details */
+
 #ifndef gpu_mc_h__
 #define gpu_mc_h__
 

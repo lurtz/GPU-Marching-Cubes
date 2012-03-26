@@ -1,3 +1,5 @@
+/* see LICENSE file for copyright and license details */
+
 #include "rawUtilities.h"
 #include "gpu-mc.h"
 #include "opengl.h"
