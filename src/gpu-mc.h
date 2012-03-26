@@ -1,7 +1,7 @@
 #ifndef gpu_mc_h__
 #define gpu_mc_h__
 
-#define DEBUG
+//#define DEBUG
 #include <GL/glew.h>
 #include <GL/glut.h>
 #include <GL/gl.h>

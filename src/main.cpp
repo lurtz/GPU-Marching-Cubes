@@ -47,8 +47,6 @@ int main(int argc, char * argv[]) {
     << std::endl
     << std::endl
     ;
-
-  std::cout << "no segfault here" << std::endl;
   #endif // DEBUG
 
   delete [] voxel_data_ptr; 
