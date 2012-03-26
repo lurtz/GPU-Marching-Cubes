@@ -25,10 +25,11 @@ def createIds(number):
     i = 0
     for gx in range(0, grid_dim_x):
         for gy in range(0, grid_dim_y):
+            grid = cudavector(gx, gy, 1)
             for z in range(0, cube_width):
                 for y in range(0, cube_width):
                     for x in range(0, cube_width):
-                        ids[i] = calcId(cudavector(gx, gy, 1), cudavector(x, y, z), grid, log2_cube_width)
+                        ids[i] = calcId(grid, cudavector(x, y, z), grid, log2_cube_width)
                         i += 1
 
     return ids
