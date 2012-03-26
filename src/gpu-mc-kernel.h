@@ -1,16 +1,7 @@
 #include <device_functions.h>
-#include <stdio.h>
 
 #ifndef gpu_mc_kernel_h__
 #define gpu_mc_kernel_h__
-
-// printf() is only supported
-// for devices of compute capability 2.0 and above
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
-#define printf(f, ...) ((void)(f, __VA_ARGS__),0)
-#endif
-
-//#define USE_PRINTF false
 
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
@@ -404,7 +395,7 @@ inline __device__ void write_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size
 }
 
 __device__ float3 mix(float3 x, float3 y, float a) {
-  float3 diff = x-y;
+  float3 diff = y-x;
   float3 scaled = diff*a;
   float3 ret_val = x + scaled;
   return ret_val;
@@ -476,16 +467,6 @@ __constant__ __device__ int max_target = 10;
 __constant__ __device__ int min_target = 0;
 
 template<typename T>
-__device__ void printArray(T * array, unsigned int size, int target, char * name) {
-    printf("target: %d, %s[%d] = {\n", target, name, size);
-    for (unsigned int i = 0; i < size; i++) {
-        if (array[i] != 0)
-        printf("target: %d,   %d\n", target, array[i]);
-    }
-    printf("target: %d, }\n", target);
-}
-
-template<typename T>
 __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 current, int log2Size) {
     int neighbors[8] = {
             get_voxel<T>(hp, current + cubeOffsets[0], log2Size).x,
@@ -497,10 +478,6 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
             get_voxel<T>(hp, current + cubeOffsets[6], log2Size).x,
             get_voxel<T>(hp, current + cubeOffsets[7], log2Size).x
     };
-    #ifdef USE_PRINTF
-    if (min_target <= target && target < max_target)
-        printArray(neighbors, 8, target, "neighbors");
-    #endif
 
     int acc = current.w + neighbors[0];
     bool cmp[8];
@@ -521,12 +498,6 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
 
     unsigned int sum = (cmp[0]+cmp[1]+cmp[2]+cmp[3]+cmp[4]+cmp[5]+cmp[6]+cmp[7]);
     uint4 offset = cubeOffsets[sum];
-    #ifdef USE_PRINTF
-    if (min_target <= target && target < max_target) {
-        printf("target: %d, sum = %d\n", target, sum);
-        printf("target: %d, offset = (%d, %d, %d)\n", target, offset.x, offset.y, offset.z);
-    }
-    #endif
     current += offset;
     current.x = current.x*2;
     current.y = current.y*2;
@@ -540,10 +511,6 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
         cmp[5]*neighbors[5] + 
         cmp[6]*neighbors[6] + 
         cmp[7]*neighbors[7];
-    #ifdef USE_PRINTF
-    if (min_target <= target && target < max_target)
-        printf("target: %d, cubePosition is now: (%d, %d, %d, %d)\n", target, current.x, current.y, current.z, current.w);
-    #endif
     return current;
 }
 
@@ -569,14 +536,9 @@ __global__ void traverseHP(
     target = (target + threadIdx.y) << log2CubeWidth;
     target += threadIdx.x;
     if(target >= sum)
-        //target = 0;
         return;
 
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
-    #ifdef USE_PRINTF
-    if (min_target <= target && target < max_target)
-        printf("target: %d, cubePosition at start: (%d, %d, %d, %d)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w);
-    #endif
     if (size > 512)
         cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
     
@@ -624,23 +586,12 @@ __global__ void traverseHP(
             );
 
         const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
-        #ifdef USE_PRINTF
-        if (min_target <= target && target < max_target)
-            printf("target: %d, cubePosition: (%d, %d, %d, %d), value0: %d\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, value0);
-        #endif
 
         const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
-
-        #ifdef USE_PRINTF
-        if (min_target <= target && target < max_target) {
-            printf("target: %d, cubePosition: (%d, %d, %d, %d), vertex: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, vertex.x, vertex.y, vertex.z);
-            printf("target: %d, cubePosition: (%d, %d, %d, %d), normal: (%f, %f, %f)\n", target, cubePosition.x, cubePosition.y, cubePosition.z, cubePosition.w, normal.x, normal.y, normal.z);
-        }
-        #endif
 
         VBOBuffer[target*6 + vertexNr*2] = vertex;
         VBOBuffer[target*6 + vertexNr*2 + 1] = normal;
