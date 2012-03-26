@@ -1,0 +1,13 @@
+Marching cube taken from https://github.com/smistad/GPU-Marching-Cubes and ported to cuda.
+
+For building you need to have Cuda, OpenGL, GLEW and GLUT installed.
+To compile (assuming you are in the top directory):
+mkdir build
+cd build
+cmake ..
+make
+
+After compiling you can run the program:
+./mc path/to/voxel/data.raw
+
+Please note, that RAW files need a second file, which contains the dimensions of the RAW file. If voxeldata.raw is a RAW file, the other file would be called voxeldata.raw.dim . For example RAW files see: https://bitbucket.org/cg2/opencl/src/c2de329bf761/src/voxeldata
