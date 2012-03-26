@@ -195,6 +195,29 @@ void updateScalarField() {
     cudaThreadSynchronize();
 }
 
+template<typename T>
+T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
+    T * lvl0_data = new T[size.depth*size.depth*size.depth];
+    cudaPitchedPtr h_pitched_ptr = make_cudaPitchedPtr(lvl0_data, size.depth*sizeof(T), size.depth, size.depth);
+    struct cudaMemcpy3DParms parms = {0};
+    parms.srcPtr = source;
+    parms.dstPtr = h_pitched_ptr;
+    parms.extent = size;
+    parms.kind = cudaMemcpyDeviceToHost;
+    handleCudaError(cudaMemcpy3D(&parms));
+    return lvl0_data;
+}
+
+template<typename T>
+T* get_data_from_pitched_ptr(std::pair<cudaExtent, cudaPitchedPtr> source) {
+    return get_data_from_pitched_ptr<T>(source.first, source.second);
+}
+
+template<typename T>
+T* get_data_from_pitched_ptr(unsigned int level) {
+    return get_data_from_pitched_ptr<T>(images_size_pointer.at(level));
+}
+
 #ifdef DEBUG
 // code to test classify cubes
 unsigned int get_index(unsigned int x, unsigned int y, unsigned int z) {
@@ -222,31 +245,6 @@ uint4 lokalCubeOffsets[8] = {
 	}; 
 
 unsigned char lokalNrOfTriangles[256] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 2, 3, 4, 4, 3, 3, 4, 4, 3, 4, 5, 5, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 2, 3, 3, 4, 3, 4, 2, 3, 3, 4, 4, 5, 4, 5, 3, 2, 3, 4, 4, 3, 4, 5, 3, 2, 4, 5, 5, 4, 5, 2, 4, 1, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 2, 4, 3, 4, 3, 5, 2, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 3, 4, 4, 3, 4, 5, 5, 4, 4, 3, 5, 2, 5, 4, 2, 1, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 2, 3, 3, 2, 3, 4, 4, 5, 4, 5, 5, 2, 4, 3, 5, 4, 3, 2, 4, 1, 3, 4, 4, 5, 4, 5, 3, 4, 4, 5, 5, 2, 3, 4, 2, 1, 2, 3, 3, 2, 3, 4, 2, 1, 3, 2, 4, 1, 2, 1, 1, 0};
-
-template<typename T>
-T* get_data_from_pitched_ptr(cudaExtent size, cudaPitchedPtr source) {
-    T * lvl0_data = new T[size.depth*size.depth*size.depth];
-    cudaPitchedPtr h_pitched_ptr = make_cudaPitchedPtr(lvl0_data, size.depth*sizeof(T), size.depth, size.depth);
-    struct cudaMemcpy3DParms parms = {0};
-    parms.srcPtr = source;
-    parms.dstPtr = h_pitched_ptr;
-    parms.extent = size;
-    parms.kind = cudaMemcpyDeviceToHost;
-    clock_t start = clock();
-    handleCudaError(cudaMemcpy3D(&parms));
-    std::cout << "get_data_from_pitched_ptr: cudaMemcpy took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
-    return lvl0_data;
-}
-
-template<typename T>
-T* get_data_from_pitched_ptr(std::pair<cudaExtent, cudaPitchedPtr> source) {
-    return get_data_from_pitched_ptr<T>(source.first, source.second);
-}
-
-template<typename T>
-T* get_data_from_pitched_ptr(unsigned int level) {
-    return get_data_from_pitched_ptr<T>(images_size_pointer.at(level));
-}
 
 bool testUpdateScalarField(unsigned char * voxels) {
     updateScalarField();
@@ -347,12 +345,8 @@ unsigned int sum_3d_array(T const * const _3darray, const cudaExtent& dim) {
 
 template<typename T>
 unsigned int sum_3d_array(const std::pair<cudaExtent, cudaPitchedPtr>& pair) {
-    clock_t start = clock();
     T* sum_of_triangles_from_gpu = get_data_from_pitched_ptr<T>(pair);
-    std::cout << "sum_3d_array: get_data_from_pitched_ptr took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
-    start = clock();
     unsigned int sum = sum_3d_array(sum_of_triangles_from_gpu, pair.first);
-    std::cout << "sum_3d_array: sum_3d_array took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     delete [] sum_of_triangles_from_gpu;
     return sum;
 }
@@ -403,16 +397,6 @@ void resizeVBO(size_t _vbo_size, bool clear) {
         data = new float3[_vbo_size/sizeof(float3)];
         for (unsigned int i = 0; i < _vbo_size/sizeof(float3); i++) {
             float3 val = {0};
-/*
-            if (i % 6 == 0)
-                val = make_float3(0.0f, 200.0f, 0.0f);
-            if (i % 6 == 1)
-                val = make_float3(100.0f, 200.0f, 0.0f);
-            if (i % 6 == 2)
-                val = make_float3(100.0f, 300.0f, 0.0f);
-            if (i % 6 > 2)
-                val = make_float3(0.0f, 0.0f, 1.0f);
-*/
             data[i] = val;
         }
     }
@@ -442,7 +426,6 @@ unsigned int getNumberOfTriangles() {
     assert(log2(SIZE) == images_size_pointer.size());
     size_t num_of_levels = images_size_pointer.size();
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
-    clock_t start = clock();
     if (num_of_levels == 1)
         sum = sum_3d_array<uchar4>(pair);
     else if (num_of_levels == 2)
@@ -451,18 +434,15 @@ unsigned int getNumberOfTriangles() {
         sum = sum_3d_array<ushort1>(pair);
     else
         sum = sum_3d_array<uint1>(pair);
-    std::cout << "getNumberOfTriangles: sum_3d_array took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     sum_of_triangles = sum;
     std::cout << "you will get " << sum << " triangles" << std::endl;
 
-    start = clock();
     handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
-    std::cout << "getNumberOfTriangles: copying number of levels to gpu took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     return sum;
 }
 
 float3 * getTriangleDataPointer() {
-    size_t buffer_size = resizeVBOIfNeeded(true);
+    size_t buffer_size = resizeVBOIfNeeded();
 
     float3 * triangle_data = NULL;
     if (vbo_gl != 0) {
@@ -486,14 +466,10 @@ void freeResources(float3 * triangle_data) {
 
 // creates the VBO
 int histoPyramidTraversal() {
-    clock_t start = clock();
     getNumberOfTriangles();
-    std::cout << "histoPyramidTraversal: getting number of triangles took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
 
-    start = clock();
     float3 * triangle_data = getTriangleDataPointer();
     assert(triangle_data != NULL);
-    std::cout << "histoPyramidTraversal: allocating VBO took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
 
     // TODO ask device properties how much threads can be started
     //      there are cards, where not all 512 threads can be started, when
@@ -509,7 +485,6 @@ int histoPyramidTraversal() {
     int grid_dim_y = ceil(sqrt_blocks);
     dim3 grid(grid_dim_x, grid_dim_y, 1);
     
-    start = clock();
     traverseHP<<<grid, block>>>(
         triangle_data,
         isolevel,
@@ -519,7 +494,6 @@ int histoPyramidTraversal() {
         log2(tmp_cube_size)
         );
     handleCudaError(cudaGetLastError());
-    std::cout << "histoPyramidTraversal: traverseHP took " << static_cast<double>(clock()-start)/CLOCKS_PER_SEC << " seconds\n";
     cudaThreadSynchronize();
     
     freeResources(triangle_data);
