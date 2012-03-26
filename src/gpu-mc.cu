@@ -500,9 +500,13 @@ int histoPyramidTraversal() {
     //      some data is in memory
     unsigned int tmp_cube_size = CUBESIZE/2;
     dim3 block(tmp_cube_size, tmp_cube_size, tmp_cube_size);
-    int number_of_blocks = sum_of_triangles/tmp_cube_size/tmp_cube_size/tmp_cube_size;
-    int grid_dim_x = floor(sqrt(number_of_blocks));
-    int grid_dim_y = ceil(number_of_blocks/grid_dim_x);
+
+    float number_of_blocks = static_cast<float>(sum_of_triangles)/tmp_cube_size/tmp_cube_size/tmp_cube_size;
+    float sqrt_blocks = sqrt(number_of_blocks);
+    // TODO there seems to be more blocks needed, but don't know what with the math is wrong
+    //      when I add +1 to grid_dim_x it works with sphere
+    int grid_dim_x = floor(sqrt_blocks);
+    int grid_dim_y = ceil(sqrt_blocks);
     dim3 grid(grid_dim_x, grid_dim_y, 1);
     
     start = clock();
