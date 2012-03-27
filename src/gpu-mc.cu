@@ -13,11 +13,6 @@
 // the sidelength of a block on the grid, it is always cubic, which results to
 // 8*8*8 = 512 threads per block
 const unsigned int CUBESIZE = 8;
-const unsigned int LOG2CUBESIZE = 3;
-// when the histopyramid is created 8 cubes are added and the result will be
-// saved in a new cube on a smaller volume
-const unsigned int CUBESIZEHP = 2;
-const unsigned int LOG2CUBESIZEHP = 1;
 // the size of the voxelvolume TODO not needed
 unsigned int SIZE;
 // size of the voxelvolume in bytes
@@ -209,7 +204,7 @@ void updateScalarField() {
     dim3 block(CUBESIZE, CUBESIZE, CUBESIZE);
     dim3 grid((_size.depth / CUBESIZE) * (_size.depth / CUBESIZE), _size.depth / CUBESIZE, 1);
     int log2GridSize = log2(_size.depth / CUBESIZE);
-    kernelClassifyCubes<<<grid , block>>>(images_size_pointer.at(0).second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, LOG2CUBESIZE, _size.depth);
+    kernelClassifyCubes<<<grid , block>>>(images_size_pointer.at(0).second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, log2(CUBESIZE), _size.depth);
     handleCudaError(cudaGetLastError());
     cudaThreadSynchronize();
 }
@@ -327,6 +322,9 @@ bool testUpdateScalarField(unsigned char * voxels) {
 
 // calculates the total number of triangles needed
 void histoPyramidConstruction() {
+    // when the histopyramid is created 8 cubes are added and the result will be
+    // saved in a new cube on a smaller volume
+    const unsigned int CUBESIZEHP = 2;
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
     // i=    0       1        2        3        4      5
@@ -338,24 +336,24 @@ void histoPyramidConstruction() {
         if (i == 0)
             // second level
             // uchar4 -> uchar1
-            kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP);
+            kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP));
         else if (i == 1)
             // third level
             // uchar1 -> ushort1
-            kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+            kernelConstructHPLevel<uchar1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP)); 
         else if (i == 2 || i == 3)
             // fourth, fifth level
             // ushort1 -> ushort1
             // ushort1 -> ushort1
-            kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+            kernelConstructHPLevel<ushort1, ushort1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP)); 
         else if (i == 4)
             // sixth level
             // ushort1 -> uint1
-            kernelConstructHPLevel<ushort1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+            kernelConstructHPLevel<ushort1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP)); 
         else
             // all other levels
             // uint1 -> uint1
-            kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, LOG2CUBESIZEHP); 
+            kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP));
         handleCudaError(cudaGetLastError());
         cudaThreadSynchronize();
     }
