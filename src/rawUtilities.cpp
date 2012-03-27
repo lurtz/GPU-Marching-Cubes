@@ -23,6 +23,10 @@ int toid(int x, int y, int z, const std::vector<unsigned int>& dim) {
 std::vector<unsigned int> read_dimensions(const std::string file_dim) {
     std::vector<unsigned int> dim(3);
     std::ifstream file_dim_in(file_dim.c_str());
+    if (!file_dim_in) {
+        std::cout << "no file called " << file_dim << " found. please create one in the same directory of the raw file. the format is \nx = <width>\ny = <height>\nz = <depth>" << std::endl;
+        exit(1);
+    }
     while (file_dim_in) {
         char token;
         unsigned int index = 3;
@@ -49,6 +53,7 @@ unsigned char * readRawFile(char const * const filename, int sizeX, int sizeY, i
     unsigned char * rawVoxels = new unsigned char[rawDataSize];
     FILE * file = fopen(filename, "rb");
     if(file == NULL) {
+        std::cout << "could not open file: " << filename << ", creating a sphere instead" << std::endl;
         delete [] rawVoxels;
         return NULL;
     }
