@@ -31,14 +31,18 @@ __device__ uint4 getPosFromGrid(const uint3 blockIndex, const uint3 threadIndex,
 }
 
 // calculates the array index of a 3D position in the voxeldatda
-__device__ unsigned int getId(uint4 pos, int log2BlockWidth, int log2CubeWidth) {
-    int log2Sum = log2BlockWidth + log2CubeWidth;
+__device__ unsigned int getId(uint4 pos, int log2Sum) {
     return (((pos.z << log2Sum) + pos.y) << log2Sum) + pos.x;
 }
 
+__device__ unsigned int getId(uint4 pos, int log2BlockWidth, int log2CubeWidth) {
+    int log2Sum = log2BlockWidth + log2CubeWidth;
+    return getId(pos, log2Sum);
+}
+
 // addition
-inline __host__ __device__ uchar4 operator+(uchar4 a, uchar4 b) {
-    return make_uchar4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+inline __host__ __device__ uchar2 operator+(uchar2 a, uchar2 b) {
+    return make_uchar2(a.x + b.x, a.y + b.y);
 }
 
 // addition
@@ -105,7 +109,7 @@ __device__ float3 mix(float3 x, float3 y, float a) {
 
 // classifies each cube and computates a lookuptable index according to its 8 
 // voxels and the isolevel. for each cube a thread is started.
-// writes into a uchar4 volume with the following layout: nr of triangles for this cube, lookuptable index, value of voxel with id 0, nothing 
+// writes into a uchar2 volume with the following layout: nr of triangles for this cube, lookuptable index 
 __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char * rawData, int isolevel, int log2BlockWidth, int mask, int log2CubeWidth, unsigned int volumeSize) {
     // 2d grid
     // 3d kernel
@@ -116,7 +120,7 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
 
     // was not done in the opencl programm, maybe not needed
     // avoid looking over array boundaries
-    uchar4 ret_val = make_uchar4(0, 0, first, 0);
+    uchar2 ret_val = make_uchar2(0, 0);
     if (!(pos.x+1 >= volumeSize || pos.y+1 >= volumeSize || pos.z+1 >= volumeSize)) {
         // Find cube class nr
         const unsigned char cubeindex = 
@@ -128,11 +132,11 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
             ((rawData[getId(pos + cubeOffsets[5], log2BlockWidth, log2CubeWidth)] > isolevel) << 5) |
             ((rawData[getId(pos + cubeOffsets[7], log2BlockWidth, log2CubeWidth)] > isolevel) << 6) |
             ((rawData[getId(pos + cubeOffsets[6], log2BlockWidth, log2CubeWidth)] > isolevel) << 7);
-        ret_val = make_uchar4(nrOfTriangles[cubeindex], cubeindex, first, 0);
+        ret_val = make_uchar2(nrOfTriangles[cubeindex], cubeindex);
     }
 
     // Store number of triangles
-    write_voxel<uchar4>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
+    write_voxel<uchar2>(histoPyramid, pos, log2BlockWidth+log2CubeWidth, ret_val);
 }
 
 // now tested and seems to work
@@ -152,7 +156,6 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
         uint4 tmpPos = readPos+cubeOffsets[i];
         char* slice = devPtr + tmpPos.z * slicePitch;
         T* row = (T*)(slice + tmpPos.y * pitch);
-        // first level has uchar4 as datatype
         writeValue.x += row[tmpPos.x].x;
     }
 
@@ -214,6 +217,7 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
 // we wish to create. we walk the histopyramid down using target and find the
 // voxel for which we create the triangle.
 __global__ void traverseHP(
+        unsigned char * rawData,
         float3 * VBOBuffer,
         int isolevel,
         int sum,
@@ -252,14 +256,14 @@ __global__ void traverseHP(
         cubePosition = scanHPLevel<short1>(target, levels[3], cubePosition, log2Size-3);
     cubePosition = scanHPLevel<short1>(target, levels[2], cubePosition, log2Size-2);
     cubePosition = scanHPLevel<char1>(target, levels[1], cubePosition, log2Size-1);
-    cubePosition = scanHPLevel<uchar4>(target, levels[0], cubePosition, log2Size);
+    cubePosition = scanHPLevel<uchar2>(target, levels[0], cubePosition, log2Size);
     // revert last multiplikation in scanHPLevel
     cubePosition.x = cubePosition.x / 2;
     cubePosition.y = cubePosition.y / 2;
     cubePosition.z = cubePosition.z / 2;
 
     char vertexNr = 0;
-    const uchar4 cubeData = get_voxel<uchar4>(levels[0], cubePosition, log2Size);
+    const uchar2 cubeData = get_voxel<uchar2>(levels[0], cubePosition, log2Size);
 
     // seems to compute one triangle
     // max 5 triangles
@@ -270,20 +274,20 @@ __global__ void traverseHP(
 
 	// forwardDifferences are needed to compute the normal
         const float3 forwardDifference0 = make_float3(
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size).z) 
-            );
+                (float)(-rawData[getId(make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size)] + rawData[getId(make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size)]),
+                (float)(-rawData[getId(make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size)] + rawData[getId(make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size)]),
+                (float)(-rawData[getId(make_uint4(point0.x, point0.y, point0.z+1, 0), log2Size)] + rawData[getId(make_uint4(point0.x, point0.y, point0.z-1, 0), log2Size)])
+            );   
 
         const float3 forwardDifference1 = make_float3(
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size).z), 
-                (float)(-get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size).z) 
-            );
+                (float)(-rawData[getId(make_uint4(point1.x+1, point1.y, point1.z, 0), log2Size)] + rawData[getId(make_uint4(point1.x-1, point1.y, point1.z, 0), log2Size)]),
+                (float)(-rawData[getId(make_uint4(point1.x, point1.y+1, point1.z, 0), log2Size)] + rawData[getId(make_uint4(point1.x, point1.y-1, point1.z, 0), log2Size)]),
+                (float)(-rawData[getId(make_uint4(point1.x, point1.y, point1.z+1, 0), log2Size)] + rawData[getId(make_uint4(point1.x, point1.y, point1.z-1, 0), log2Size)])
+            );   
 
-        const int value0 = get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y, point0.z, 0), log2Size).z;
+        const int value0 = rawData[getId(make_uint4(point0.x, point0.y, point0.z, 0), log2Size)];
 
-        const float diff = (isolevel-value0) / (float)(get_voxel<uchar4>(levels[0], make_uint4(point1.x, point1.y, point1.z, 0), log2Size).z - value0);
+        const float diff = (isolevel-value0) / (float)(rawData[getId(make_uint4(point1.x, point1.y, point1.z, 0), log2Size)] - value0);
         
         const float3 vertex = mix(make_float3(point0.x, point0.y, point0.z), make_float3(point1.x, point1.y, point1.z), diff);
 

@@ -140,7 +140,7 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     cudaPitchedPtr tmpDataPtr;
     // Make the two first buffers use INT8
     // first buffer
-    bufferSize.width = size * sizeof(uchar4);
+    bufferSize.width = size * sizeof(uchar2);
     bufferSize.height = size;
     bufferSize.depth = size;
     handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
@@ -241,15 +241,15 @@ void histoPyramidConstruction() {
     dim3 block(CUBESIZEHP, CUBESIZEHP, CUBESIZEHP);
     
     // i=    0       1        2        3        4      5
-    // uchar4, uchar1, ushort1, ushort1, ushort1, uint1, ...
+    // uchar2, uchar1, ushort1, ushort1, ushort1, uint1, ...
     for (unsigned int i = 0; i < log2(images_size_pointer.at(0).first.depth)-1; i++) {
         cudaExtent _size = images_size_pointer.at(i+1).first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
         if (i == 0)
             // second level
-            // uchar4 -> uchar1
-            kernelConstructHPLevel<uchar4, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP));
+            // uchar2 -> uchar1
+            kernelConstructHPLevel<uchar2, uchar1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP));
         else if (i == 1)
             // third level
             // uchar1 -> ushort1
@@ -342,7 +342,7 @@ unsigned int getNumberOfTriangles() {
     size_t num_of_levels = images_size_pointer.size();
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
     if (num_of_levels == 1)
-        sum = sum_3d_array<uchar4>(pair);
+        sum = sum_3d_array<uchar2>(pair);
     else if (num_of_levels == 2)
         sum = sum_3d_array<uchar1>(pair);
     else if (num_of_levels == 3 || num_of_levels == 4 || num_of_levels == 5)
@@ -402,6 +402,7 @@ int histoPyramidTraversal() {
     
     size_t size = images_size_pointer.at(0).first.depth;
     traverseHP<<<grid, block>>>(
+        rawDataPtr,
         triangle_data,
         isolevel,
         sum_of_triangles,
