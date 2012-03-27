@@ -139,6 +139,7 @@ bool handleCudaError(const cudaError_t& status) {
 
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     // TODO get rid of cudaMemset3D()
+    // TODO keep only one copy of the voxels in device memory
     // of vbo is zero, this is likely started via ssh
     vbo_gl = vbo;
     if (vbo != 0)

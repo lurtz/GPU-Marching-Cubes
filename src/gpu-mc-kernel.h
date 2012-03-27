@@ -5,6 +5,7 @@
 #ifndef gpu_mc_kernel_h__
 #define gpu_mc_kernel_h__
 
+// each vertex of the cube gets a number
 __device__ __constant__ uint4 cubeOffsets[8] = {
 		{0, 0, 0, 0},
 		{1, 0, 0, 0},
@@ -18,6 +19,7 @@ __device__ __constant__ uint4 cubeOffsets[8] = {
 
 __device__ __constant__ unsigned char nrOfTriangles[256] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 2, 3, 4, 4, 3, 3, 4, 4, 3, 4, 5, 5, 2, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 2, 3, 3, 4, 3, 4, 2, 3, 3, 4, 4, 5, 4, 5, 3, 2, 3, 4, 4, 3, 4, 5, 3, 2, 4, 5, 5, 4, 5, 2, 4, 1, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 3, 2, 3, 3, 4, 3, 4, 4, 5, 3, 2, 4, 3, 4, 3, 5, 2, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 4, 3, 4, 4, 3, 4, 5, 5, 4, 4, 3, 5, 2, 5, 4, 2, 1, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 2, 3, 3, 2, 3, 4, 4, 5, 4, 5, 5, 2, 4, 3, 5, 4, 3, 2, 4, 1, 3, 4, 4, 5, 4, 5, 3, 4, 4, 5, 5, 2, 3, 4, 2, 1, 2, 3, 3, 2, 3, 4, 2, 1, 3, 2, 4, 1, 2, 1, 1, 0};
 
+// the edges of the cube
 __device__ __constant__ char offsets3[72] = {
 			// 0
 			0,0,0,
@@ -319,6 +321,11 @@ __device__ __constant__  char triTable[4096] =
 __constant__ size_t num_of_levels;
 __constant__ cudaPitchedPtr levels[10];
 
+// converts the coordinates of the block on the grid and the position of the
+// thread in the block into a position of the voxelvolume. each thread shall 
+// get its unique position
+// this only works with volumesizes and blocksizes as a power of 2
+// log2* and mask are used to do multiplikation and computation of the remainder
 __device__ uint4 getPosFromGrid(const uint3 blockIndex, const uint3 threadIndex, int log2BlockWidth, int mask, int log2CubeWidth) {
     int blkX = blockIndex.y;
     int blkY = blockIndex.x >> log2BlockWidth;
@@ -335,6 +342,7 @@ __device__ uint4 getPosFromGrid(const uint3 blockIndex, const uint3 threadIndex,
     return make_uint4(x, y, z, 0);
 }
 
+// calculates the array index of a 3D position in the voxeldatda
 __device__ unsigned int getId(uint4 pos, int log2BlockWidth, int log2CubeWidth) {
     int log2Sum = log2BlockWidth + log2CubeWidth;
     return (((pos.z << log2Sum) + pos.y) << log2Sum) + pos.x;
@@ -376,6 +384,7 @@ inline __host__ __device__ uint4 operator+=(uint4& a, const uint4& b) {
     return a;
 }
 
+// returns the pointer to a voxel inside a cuda 3D array
 template<typename T>
 inline __device__ T* get_voxel_address(cudaPitchedPtr cpptr, uint4 pos, int log2Size) {
     char* devPtr = (char*)cpptr.ptr;
@@ -386,16 +395,19 @@ inline __device__ T* get_voxel_address(cudaPitchedPtr cpptr, uint4 pos, int log2
     return &row[pos.x];
 }
 
+// returns the value of a voxel inside a cuda 3D array
 template<typename T>
 inline __device__ T get_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size) {
     return *get_voxel_address<T>(cpptr, pos, log2Size);
 }
 
+// writes a value a voxel inside a cuda 3D array
 template<typename T>
 inline __device__ void write_voxel(cudaPitchedPtr cpptr, uint4 pos, int log2Size, T value) {
     *get_voxel_address<T>(cpptr, pos, log2Size) = value;
 }
 
+// interpolate between x and y if a ranges from 0 to 1
 __device__ float3 mix(float3 x, float3 y, float a) {
   float3 diff = y-x;
   float3 scaled = diff*a;
@@ -403,6 +415,9 @@ __device__ float3 mix(float3 x, float3 y, float a) {
   return ret_val;
 }
 
+// classifies each cube and computates a lookuptable index according to its 8 
+// voxels and the isolevel. for each cube a thread is started.
+// writes into a uchar4 volume with the following layout: nr of triangles for this cube, lookuptable index, value of voxel with id 0, nothing 
 __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char * rawData, int isolevel, int log2BlockWidth, int mask, int log2CubeWidth, unsigned int volumeSize) {
     // 2d grid
     // 3d kernel
@@ -433,6 +448,8 @@ __global__ void kernelClassifyCubes(cudaPitchedPtr histoPyramid, unsigned char *
 }
 
 // now tested and seems to work
+// sums the contents of a 2x2x2 volume and stores the sum in a cell of a volume
+// with half side lenghts.
 template<typename T, typename Z>
 __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitchedPtr writeHistoPyramid, int log2BlockWidth, int mask, int log2CubeWidth) {
     uint4 writePos = getPosFromGrid(blockIdx, threadIdx, log2BlockWidth, mask, log2CubeWidth);
@@ -455,6 +472,9 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
 }
 
 #ifdef DEBUG
+// because of a warning of the cuda compiler, that a pointer on the device may
+// point to host memory, the cudaPitchedPtr, which were copied during setup
+// phase are compared with the ones that are passed as kernel arguments 
 __device__ __host__ bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
     return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
 }
@@ -465,9 +485,8 @@ __global__ void cmp_pitched_ptr(unsigned int level, cudaPitchedPtr cpptr, bool *
 }
 #endif // DEBUG
 
-__constant__ __device__ int max_target = 10;
-__constant__ __device__ int min_target = 0;
-
+// walks the histopyramid down one level. see the paper in the doc directory for
+// how this is supposed to work.
 template<typename T>
 __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 current, int log2Size) {
     int neighbors[8] = {
@@ -525,6 +544,10 @@ __device__ bool operator==(const uint4& a, const uint4& b) {
     return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
 }
 
+// each thread computes a triangle. target is computed from the position on the
+// grid and position of the thread in the block. target is the triangle number
+// we wish to create. we walk the histopyramid down using target and find the
+// voxel for which we create the triangle.
 __global__ void traverseHP(
         float3 * VBOBuffer,
         int isolevel,
@@ -540,6 +563,7 @@ __global__ void traverseHP(
     if(target >= sum)
         return;
 
+    // walk down the histoparymid
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
     if (size > 512)
         cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
@@ -579,7 +603,7 @@ __global__ void traverseHP(
         const int3 point0 = make_int3(cubePosition.x + offsets3[edge*6], cubePosition.y + offsets3[edge*6+1], cubePosition.z + offsets3[edge*6+2]);
         const int3 point1 = make_int3(cubePosition.x + offsets3[edge*6+3], cubePosition.y + offsets3[edge*6+4], cubePosition.z + offsets3[edge*6+5]);
 
-        // Store vertex in VBO
+	// forwardDifferences are needed to compute the normal
         const float3 forwardDifference0 = make_float3(
                 (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x+1, point0.y, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x-1, point0.y, point0.z, 0), log2Size).z), 
                 (float)(-get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y+1, point0.z, 0), log2Size).z + get_voxel<uchar4>(levels[0], make_uint4(point0.x, point0.y-1, point0.z, 0), log2Size).z), 
@@ -600,6 +624,7 @@ __global__ void traverseHP(
 
         const float3 normal = mix(forwardDifference0, forwardDifference1, diff);
 
+        // Store vertex and normal in VBO
         VBOBuffer[target*6 + vertexNr*2] = vertex;
         VBOBuffer[target*6 + vertexNr*2 + 1] = normal;
 
