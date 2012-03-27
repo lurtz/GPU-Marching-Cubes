@@ -318,7 +318,6 @@ __device__ __constant__  char triTable[4096] =
 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 // tells histogramtraversal how much levels we have and thus how much parameters it has
-__constant__ size_t num_of_levels;
 __constant__ cudaPitchedPtr levels[10];
 
 // converts the coordinates of the block on the grid and the position of the
@@ -470,20 +469,6 @@ __global__ void kernelConstructHPLevel(cudaPitchedPtr readHistoPyramid, cudaPitc
 
     write_voxel<Z>(writeHistoPyramid, writePos, log2BlockWidth + log2CubeWidth, writeValue);
 }
-
-#ifdef DEBUG
-// because of a warning of the cuda compiler, that a pointer on the device may
-// point to host memory, the cudaPitchedPtr, which were copied during setup
-// phase are compared with the ones that are passed as kernel arguments 
-__device__ __host__ bool operator==(const cudaPitchedPtr& cpp1, const cudaPitchedPtr& cpp2) {
-    return cpp1.pitch == cpp2.pitch && cpp1.ptr == cpp2.ptr && cpp1.xsize == cpp2.xsize && cpp1.ysize == cpp2.ysize;
-}
-
-__global__ void cmp_pitched_ptr(unsigned int level, cudaPitchedPtr cpptr, bool * success) {
-    cudaPitchedPtr cpptr_device = levels[level];
-    *success = cpptr == cpptr_device;
-}
-#endif // DEBUG
 
 // walks the histopyramid down one level. see the paper in the doc directory for
 // how this is supposed to work.
