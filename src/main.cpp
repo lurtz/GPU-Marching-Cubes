@@ -42,17 +42,6 @@ int main(int argc, char * argv[]) {
     setupOpenGL(&argc,argv,size,dim[0]/stepSizeX,dim[1]/stepSizeY,dim[2]/stepSizeZ,scaleX,scaleY,scaleZ);
   setupCuda(voxel_data_ptr, size, getVBO());
 
-  #ifdef DEBUG
-  if (!runTests(voxel_data_ptr))
-    std::cout << "something with the tests went wrong" << std::endl;
-  std::cout 
-    << std::endl
-    << std::endl
-    << std::endl
-    << std::endl
-    ;
-  #endif // DEBUG
-
   delete [] voxel_data_ptr; 
 
   if (use_opengl)

@@ -3,7 +3,6 @@
 #ifndef gpu_mc_h__
 #define gpu_mc_h__
 
-//#define DEBUG
 #include <GL/glew.h>
 #include <GL/glut.h>
 #include <GL/gl.h>
@@ -16,9 +15,5 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo);
 // runs the marching cube and writes the triangle mesh to the vbo supplied at 
 // setup
 int marching_cube(int _isolevel);
-
-#ifdef DEBUG
-bool runTests(unsigned char * voxels);
-#endif // DEBUG
 
 #endif // gpu_mc_h__
