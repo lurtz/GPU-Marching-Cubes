@@ -138,7 +138,6 @@ bool handleCudaError(const cudaError_t& status) {
 }
 
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
-    // TODO get rid of cudaMemset3D()
     // TODO keep only one copy of the voxels in device memory
     // of vbo is zero, this is likely started via ssh
     vbo_gl = vbo;
@@ -156,7 +155,6 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     bufferSize.height = SIZE;
     bufferSize.depth = SIZE;
     handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
-    handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
     // second buffer
@@ -164,7 +162,6 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     bufferSize.height = bufferSize.depth/2;
     bufferSize.depth = bufferSize.depth/2;
     handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
-    handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
     // And the third, fourth and fifth INT16
@@ -173,7 +170,6 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
         handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
-        handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
@@ -189,7 +185,6 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
             bufferSize.depth = 2;
         }
         handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
-        handleCudaError(cudaMemset3D(tmpDataPtr, 0, bufferSize));
         images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
     }
 
@@ -462,7 +457,6 @@ size_t resizeVBOIfNeeded(bool clear = false) {
 }
 
 // sums the top level of the histoPyramid and writes the number of levels used to the gpu
-// TODO setting the number of levels if not needed
 unsigned int getNumberOfTriangles() {
     unsigned int sum = 0;
     assert(log2(SIZE) == images_size_pointer.size());
@@ -479,7 +473,6 @@ unsigned int getNumberOfTriangles() {
     sum_of_triangles = sum;
     std::cout << "you will get " << sum << " triangles" << std::endl;
 
-    handleCudaError(cudaMemcpyToSymbol("num_of_levels", &num_of_levels, sizeof(size_t), 0, cudaMemcpyHostToDevice));
     return sum;
 }
 
@@ -547,7 +540,7 @@ int histoPyramidTraversal() {
 // because of warnings during compilation, test if the cudaPitchedPtr, which are
 // copied onto the gpu are valid and stay the same as if they are passed via
 // parameters
-bool testCudaPitchedPtrOnDevice() {
+bool testHistoPyramidTraversal() {
     dim3 grid(1,1,1);
     dim3 block(1,1,1);
     bool h_success = true;
@@ -568,33 +561,6 @@ bool testCudaPitchedPtrOnDevice() {
     handleCudaError(cudaFree(d_success));
     return success;
 }
-
-// doesn't really test the kernel. just tests some things which are used by the
-// kernel. the kernel was tested with opengl
-bool testHistoPyramidTraversal() {
-    histoPyramidTraversal();
-    bool success = true;
-    size_t num_of_levels_readback = 0;
-    handleCudaError(cudaMemcpyFromSymbol(&num_of_levels_readback, "num_of_levels", sizeof(size_t), 0, cudaMemcpyDeviceToHost));
-
-    success &= images_size_pointer.size() == num_of_levels_readback;
-    if (!success) {
-        std::cout << "number of levels on GPU are not set correctly: " << num_of_levels_readback << ", should be: " << images_size_pointer.size() << std::endl;
-    }
-
-    cudaPitchedPtr cpp = {0};
-    for (unsigned int i = 0; i < num_of_levels_readback; i++) {
-        handleCudaError(cudaMemcpyFromSymbol(&cpp, "levels", sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyDeviceToHost));
-        bool tmp_success = cpp == images_size_pointer.at(i).second;
-        if (!tmp_success) {
-            std::cout << "cudaPitchedPtr used as a argument for a kernel on the GPU does not match at level " << i << std::endl;
-        }
-        success &= tmp_success;
-    }
-    success &= testCudaPitchedPtrOnDevice();
-    return success;
-}
-
 
 bool runTests(unsigned char * voxels) {
   bool success = testUpdateScalarField(voxels);
