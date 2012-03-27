@@ -10,4 +10,9 @@ make
 After compiling you can run the program:
 ./mc path/to/voxel/data.raw
 
-Please note, that RAW files need a second file, which contains the dimensions of the RAW file. If voxeldata.raw is a RAW file, the other file would be called voxeldata.raw.dim . For example RAW files see: https://bitbucket.org/cg2/opencl/src/c2de329bf761/src/voxeldata
+Please note, that RAW files need a second file, which contains the dimensions of the RAW file. If voxeldata.raw is a RAW file, the other file would be called voxeldata.raw.dim . An example file would look like this:
+x = 64
+y = 32
+z = 90
+
+For other example RAW files see: https://bitbucket.org/cg2/opencl/src/c2de329bf761/src/voxeldata
