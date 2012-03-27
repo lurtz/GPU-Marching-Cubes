@@ -13,8 +13,6 @@
 // the sidelength of a block on the grid, it is always cubic, which results to
 // 8*8*8 = 512 threads per block
 const unsigned int CUBESIZE = 8;
-// size of the voxelvolume in bytes
-unsigned int rawMemSize;
 // pointer of voxelvolume on device memory
 unsigned char * rawDataPtr;
 // these will be used with opengl interop
@@ -192,7 +190,8 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     }
 
     // Transfer dataset to device
-    rawMemSize = size*size*size*sizeof(unsigned char);
+    // size of the voxelvolume in bytes
+    unsigned int rawMemSize = size*size*size*sizeof(unsigned char);
     handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
     handleCudaError(cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice));
 }
