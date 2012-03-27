@@ -13,8 +13,6 @@
 // the sidelength of a block on the grid, it is always cubic, which results to
 // 8*8*8 = 512 threads per block
 const unsigned int CUBESIZE = 8;
-// the size of the voxelvolume TODO not needed
-unsigned int SIZE;
 // size of the voxelvolume in bytes
 unsigned int rawMemSize;
 // pointer of voxelvolume on device memory
@@ -139,16 +137,14 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     if (vbo != 0)
         handleCudaError(cudaGLSetGLDevice(0));
 
-    SIZE = size;
-
     // Create images for the HistogramPyramid
     cudaExtent bufferSize;
     cudaPitchedPtr tmpDataPtr;
     // Make the two first buffers use INT8
     // first buffer
-    bufferSize.width = SIZE * sizeof(uchar4);
-    bufferSize.height = SIZE;
-    bufferSize.depth = SIZE;
+    bufferSize.width = size * sizeof(uchar4);
+    bufferSize.height = size;
+    bufferSize.depth = size;
     handleCudaError(cudaMalloc3D(&tmpDataPtr, bufferSize));
     images_size_pointer.push_back(std::make_pair(bufferSize, tmpDataPtr));
 
@@ -169,7 +165,7 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     }
 
     // The rest will use INT32
-    for(unsigned int i = 5; i < (log2(SIZE)); i++) {
+    for(unsigned int i = 5; i < (log2(size)); i++) {
         bufferSize.width = bufferSize.depth/2 * sizeof(uint1);
         bufferSize.height = bufferSize.depth/2;
         bufferSize.depth = bufferSize.depth/2;
@@ -187,12 +183,16 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     // this will be used by the kernel histoPyramidTraversal(), because there is
     // an argument limit of 256bytes and 10 levels of cudaPitchedPtr would
     // exceed this limit
+    if (images_size_pointer.size() > 10) {
+        std::cout << "such large volumes aren't considered yet. but the changes are minimal to support them. just increase the array size of pitchedptr in the file gpu-mc-kernel.h and recompile. do not to forget to alter this test." << std::cout;
+        exit(1);
+    }
     for (unsigned int i = 0; i < images_size_pointer.size(); i++) {
         handleCudaError(cudaMemcpyToSymbol("levels", &(images_size_pointer.at(i).second), sizeof(cudaPitchedPtr), i*sizeof(cudaPitchedPtr), cudaMemcpyHostToDevice));
     }
 
     // Transfer dataset to device
-    rawMemSize = SIZE*SIZE*SIZE*sizeof(unsigned char);
+    rawMemSize = size*size*size*sizeof(unsigned char);
     handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
     handleCudaError(cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice));
 }
@@ -238,16 +238,18 @@ T* get_data_from_pitched_ptr(unsigned int level) {
 // code to test classify cubes
 // calculate a 1d index from a 3D position on a cube
 unsigned int get_index(unsigned int x, unsigned int y, unsigned int z) {
-  return x + y*SIZE + z*SIZE*SIZE;
+  unsigned int size = images_size_pointer.at(0).first.depth;
+  return x + y*size + z*size*size;
 }
 
 // given a cubeid, calculate the position it is on the 3D cube
 void get_voxel_from_cube_id(unsigned int cube_id, unsigned int *x, unsigned int *y, unsigned *z) {
   // return lower left position of cube, other points can be obtained with +0,1
-  *z = cube_id / (SIZE-1) / (SIZE-1);
-  unsigned int cube_id_plane = cube_id % ((SIZE-1) * (SIZE-1));
-  *y = cube_id_plane / (SIZE-1);
-  *x = cube_id_plane % (SIZE-1);
+  unsigned int size = images_size_pointer.at(0).first.depth;
+  *z = cube_id / (size-1) / (size-1);
+  unsigned int cube_id_plane = cube_id % ((size-1) * (size-1));
+  *y = cube_id_plane / (size-1);
+  *x = cube_id_plane % (size-1);
 }
 
 // the cubeOffsets arent used linearly in the device code. this is the mapping
@@ -276,7 +278,8 @@ bool testUpdateScalarField(unsigned char * voxels) {
     sum_of_triangles = 0;
 
     // calc for each voxel index and number of triangles using a different implementation
-    for (unsigned int i = 0; i < (SIZE-1)*(SIZE-1)*(SIZE-1); i++) {
+    size_t size = images_size_pointer.at(0).first.depth;
+    for (unsigned int i = 0; i < (size-1)*(size-1)*(size-1); i++) {
         // get base voxel of the cube
         unsigned int x, y, z;
         get_voxel_from_cube_id(i, &x, &y, &z);  
@@ -329,7 +332,7 @@ void histoPyramidConstruction() {
     
     // i=    0       1        2        3        4      5
     // uchar4, uchar1, ushort1, ushort1, ushort1, uint1, ...
-    for (unsigned int i = 0; i < log2(SIZE)-1; i++) {
+    for (unsigned int i = 0; i < log2(images_size_pointer.at(0).first.depth)-1; i++) {
         cudaExtent _size = images_size_pointer.at(i+1).first;
         dim3 grid((_size.depth / CUBESIZEHP) * (_size.depth / CUBESIZEHP), _size.depth / CUBESIZEHP, 1);
         int log2GridSize = log2(_size.depth / CUBESIZEHP);
@@ -401,7 +404,7 @@ bool templatedTestHistoPyramidConstruction(unsigned int level) {
 bool testHistoPyramidConstruction() {
     histoPyramidConstruction();
     bool success = true;
-    for (unsigned int i = 0; i < log2(SIZE); i++) {
+    for (unsigned int i = 0; i < log2(images_size_pointer.at(0).first.depth); i++) {
         if (i == 0)
             success &= templatedTestHistoPyramidConstruction<uchar4>(i);
         else if (i == 1)
@@ -457,7 +460,6 @@ size_t resizeVBOIfNeeded(bool clear = false) {
 // sums the top level of the histoPyramid and writes the number of levels used to the gpu
 unsigned int getNumberOfTriangles() {
     unsigned int sum = 0;
-    assert(log2(SIZE) == images_size_pointer.size());
     size_t num_of_levels = images_size_pointer.size();
     std::pair<cudaExtent, cudaPitchedPtr> pair =  images_size_pointer.back();
     if (num_of_levels == 1)
@@ -519,12 +521,13 @@ int histoPyramidTraversal() {
     int grid_dim_y = ceil(number_of_blocks/grid_dim_x);
     dim3 grid(grid_dim_x, grid_dim_y, 1);
     
+    size_t size = images_size_pointer.at(0).first.depth;
     traverseHP<<<grid, block>>>(
         triangle_data,
         isolevel,
         sum_of_triangles,
-        log2(SIZE),
-        SIZE,
+        log2(size),
+        size,
         log2(tmp_cube_size)
         );
     handleCudaError(cudaGetLastError());
