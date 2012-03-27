@@ -524,11 +524,8 @@ int histoPyramidTraversal() {
     dim3 block(tmp_cube_size, tmp_cube_size, tmp_cube_size);
 
     float number_of_blocks = static_cast<float>(sum_of_triangles)/tmp_cube_size/tmp_cube_size/tmp_cube_size;
-    float sqrt_blocks = sqrt(number_of_blocks);
-    // TODO there seems to be more blocks needed, but don't know what with the math is wrong
-    //      when I add +1 to grid_dim_x it works with sphere
-    int grid_dim_x = floor(sqrt_blocks);
-    int grid_dim_y = ceil(sqrt_blocks);
+    int grid_dim_x = ceil(sqrt(number_of_blocks));
+    int grid_dim_y = ceil(number_of_blocks/grid_dim_x);
     dim3 grid(grid_dim_x, grid_dim_y, 1);
     
     traverseHP<<<grid, block>>>(
