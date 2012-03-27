@@ -209,15 +209,6 @@ __device__ uint4 scanHPLevel(int target, __const__ cudaPitchedPtr hp, uint4 curr
     return current;
 }
 
-__device__ bool operator==(const float3& a, const float3& b) {
-    float eps = 0.00001;
-    return abs(a.x - b.x) < eps && abs(a.y - b.y) < eps && abs(a.z - b.z) < eps;
-}
-
-__device__ bool operator==(const uint4& a, const uint4& b) {
-    return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
-}
-
 // each thread computes a triangle. target is computed from the position on the
 // grid and position of the thread in the block. target is the triangle number
 // we wish to create. we walk the histopyramid down using target and find the
@@ -237,7 +228,7 @@ __global__ void traverseHP(
     if(target >= sum)
         return;
 
-    // walk down the histoparymid
+    // walk down the histopyramid
     uint4 cubePosition = {0,0,0,0}; // x,y,z,sum
     if (size > 512)
         cubePosition = scanHPLevel<int1>(target, levels[9], cubePosition, log2Size-9);
