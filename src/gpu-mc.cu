@@ -205,7 +205,7 @@ void updateScalarField() {
     int log2GridSize = log2(_size.depth / CUBESIZE);
     kernelClassifyCubes<<<grid , block>>>(images_size_pointer.at(0).second, rawDataPtr, isolevel, log2GridSize, _size.depth/CUBESIZE-1, log2(CUBESIZE), _size.depth);
     handleCudaError(cudaGetLastError());
-    cudaThreadSynchronize();
+    handleCudaError(cudaDeviceSynchronize());
 }
 
 // copies data from device memory into an array on host memory and returns a 
@@ -268,7 +268,7 @@ void histoPyramidConstruction() {
             // uint1 -> uint1
             kernelConstructHPLevel<uint1, uint1><<<grid, block>>>(images_size_pointer.at(i).second , images_size_pointer.at(i+1).second, log2GridSize, _size.depth/CUBESIZEHP-1, log2(CUBESIZEHP));
         handleCudaError(cudaGetLastError());
-        cudaThreadSynchronize();
+        handleCudaError(cudaDeviceSynchronize());
     }
 }
 
@@ -410,7 +410,7 @@ int histoPyramidTraversal() {
         log2(tmp_cube_size)
         );
     handleCudaError(cudaGetLastError());
-    cudaThreadSynchronize();
+    handleCudaError(cudaDeviceSynchronize());
     
     freeResources(triangle_data);
     return sum_of_triangles;
