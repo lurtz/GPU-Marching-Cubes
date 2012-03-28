@@ -16,3 +16,12 @@ y = 32
 z = 90
 
 For other example RAW files see: https://bitbucket.org/cg2/opencl/src/c2de329bf761/src/voxeldata
+
+In the original opencl code the base layer of the histogrampyramid consisted of
+uchar4 voxels, which saved in the z coordinate the original voxel value of the
+voxeldata and did not use the w coordinate. the author said, that it was a cache
+optimization, but for me there is no difference in speed, when ushing uchar2 and
+reading the voxelvalue from another array, with which the base layer of the
+histogrampyramid was constructed. with uchar4 the voxelvolume would have been
+saved twice on the GPU. maybe I have some other bottleneck in my implementation,
+so these cache optimization doesn't affect me now.
