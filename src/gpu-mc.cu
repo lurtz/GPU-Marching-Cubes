@@ -1,6 +1,11 @@
 /* see LICENSE file for copyright and license details */
 
 #include "gpu-mc.h"
+#ifdef DEBUG
+// gpu-mc.h must be before gpu-mc-tests.cu because gpu-mc.h defines the DEBUG
+// makro. including a .cu is ugly, but I can't get it compiled and liked otherwise
+#include "gpu-mc-tests.cu"
+#endif
 #include "gpu-mc-kernel.h"
 #include <utility>
 #include <vector>
@@ -129,7 +134,6 @@ bool handleCudaError(const cudaError_t& status) {
 }
 
 void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
-    // TODO keep only one copy of the voxels in device memory
     // of vbo is zero, this is likely started via ssh
     vbo_gl = vbo;
     if (vbo != 0)
@@ -194,6 +198,12 @@ void setupCuda(unsigned char * voxels, unsigned int size, GLuint vbo) {
     unsigned int rawMemSize = size*size*size*sizeof(unsigned char);
     handleCudaError(cudaMalloc((void **) &rawDataPtr, rawMemSize));
     handleCudaError(cudaMemcpy(rawDataPtr, voxels, rawMemSize, cudaMemcpyHostToDevice));
+
+    #ifdef DEBUG
+    if (!runTests(voxels, images_size_pointer, isolevel))
+        std::cout << "something with the tests went wrong" << std::endl;
+    std::cout << std::endl << std::endl << std::endl << std::endl;
+    #endif
 }
 
 // classifies each voxel and calculates the number of triangles needed for this
